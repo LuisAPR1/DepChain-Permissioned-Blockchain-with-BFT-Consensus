@@ -80,6 +80,11 @@ public class StubbornLink extends P2PLink implements Runnable {
 
 	// Handler for lower receive
 	private void internalRxHandler(byte[] bytes, P2PLink _unused) {
+		// Ignore messages too small to contain ID
+		// Prevents crash on malformed messages (by bizantine nodes)
+		if (bytes.length < 8)
+			return;
+
 		if (isACK(bytes))
 		{
 			handleACK(bytes);
