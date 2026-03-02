@@ -3,6 +3,8 @@ package tecnico.depchain.links;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
+import java.util.Set;
+import java.util.HashSet;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
@@ -12,11 +14,13 @@ import javax.crypto.SecretKey;
 
 // Authenticated Perfect link implementation
 // Prepends MACs to messages for authenticity validation
+// Deduplicates messages to guarantee at-most-once delivery
 // NOTE: Delivery order is NOT implemented here. Consider adding it?
 
 public class AuthenticatedPerfectLink extends P2PLink {
 	private StubbornLink lower;
 	private Mac outgoing_mac, incoming_mac;
+	private Set<ByteBuffer> delivered = new HashSet<>();
 
 	public AuthenticatedPerfectLink(InetSocketAddress remote, SecretKey ownKey, PublicKey remoteKey)
 			throws SocketException, NoSuchAlgorithmException, InvalidKeyException {
@@ -66,7 +70,12 @@ public class AuthenticatedPerfectLink extends P2PLink {
 				return; // Ignore bad message
 		}
 
-		// TODO: Deduplicate messages
+		// Deduplicate messages
+		ByteBuffer key = ByteBuffer.wrap(payload);
+		synchronized (delivered) {
+			if (!delivered.add(key))
+				return; // Already delivered
+		}
 
 		rxHandler.accept(payload, this);
 	}
