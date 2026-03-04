@@ -113,7 +113,7 @@ public class StubbornLink extends P2PLink implements Runnable {
 		long id = txCounter++;
 
 		var buffer = ByteBuffer.allocate(8 + payload.length);
-		buffer.putLong(txCounter);
+		buffer.putLong(id);
 		buffer.put(payload);
 
 		return new MessageWithID(id, buffer.array());
