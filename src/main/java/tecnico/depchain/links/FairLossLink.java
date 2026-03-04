@@ -35,6 +35,7 @@ public class FairLossLink extends P2PLink implements Runnable {
 		byte[] rxBuffer = new byte[64 * 1024];
 		DatagramPacket packet = new DatagramPacket(rxBuffer, rxBuffer.length);
 		while (true) {
+			packet.setLength(rxBuffer.length);
 			try {
 				sock.receive(packet);
 			} catch (IOException e) {
@@ -42,8 +43,11 @@ public class FairLossLink extends P2PLink implements Runnable {
 				continue;
 			}
 
-			if (rxHandler != null)
-				rxHandler.accept(rxBuffer, this);
+			if (rxHandler != null) {
+				byte[] received = new byte[packet.getLength()];
+				System.arraycopy(rxBuffer, 0, received, 0, packet.getLength());
+				rxHandler.accept(received, this);
+			}
 		}
 	}
 }
