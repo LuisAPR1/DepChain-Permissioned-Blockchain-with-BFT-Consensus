@@ -24,10 +24,10 @@ public class FairLossLinkTest {
 		CountDownLatch latch = new CountDownLatch(1);
 		AtomicReference<byte[]> received = new AtomicReference<>();
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			received.set(data);
 			latch.countDown();
-		};
+		});
 
 		byte[] message = "Hello from A".getBytes();
 		linkA.Transmit(message);
@@ -47,9 +47,9 @@ public class FairLossLinkTest {
 		int messageCount = 5;
 		CountDownLatch latch = new CountDownLatch(messageCount);
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			latch.countDown();
-		};
+		});
 
 		for (int i = 0; i < messageCount; i++) {
 			linkA.Transmit(("Message " + i).getBytes());
@@ -71,14 +71,14 @@ public class FairLossLinkTest {
 		AtomicReference<byte[]> receivedByA = new AtomicReference<>();
 		AtomicReference<byte[]> receivedByB = new AtomicReference<>();
 
-		linkA.rxHandler = (data, link) -> {
+		linkA.SetHandler((data, link) -> {
 			receivedByA.set(data);
 			latchA.countDown();
-		};
-		linkB.rxHandler = (data, link) -> {
+		});
+		linkB.SetHandler((data, link) -> {
 			receivedByB.set(data);
 			latchB.countDown();
-		};
+		});
 
 		linkA.Transmit("A to B".getBytes());
 		linkB.Transmit("B to A".getBytes());
@@ -103,10 +103,10 @@ public class FairLossLinkTest {
 		// Send binary data (not just text)
 		byte[] binaryData = new byte[] { 0x00, 0x01, 0x02, (byte) 0xFF, (byte) 0xFE, 0x7F };
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			received.set(data);
 			latch.countDown();
-		};
+		});
 
 		linkA.Transmit(binaryData);
 

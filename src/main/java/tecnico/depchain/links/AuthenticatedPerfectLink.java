@@ -4,6 +4,7 @@ import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.HashSet;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -16,19 +17,19 @@ import javax.crypto.SecretKey;
 // Deduplicates messages to guarantee at-most-once delivery
 // NOTE: Delivery order is NOT implemented here. Consider adding it?
 
-public class AuthenticatedPerfectLink extends P2PLink {
+public class AuthenticatedPerfectLink implements P2PLink {
 	private StubbornLink lower;
 	private Mac outgoing_mac, incoming_mac;
 	private long txSeqNum = 0;
 	private long highWaterMark = -1;
 	private Set<Long> outOfOrder = new HashSet<>();
 
+	private BiConsumer<byte[], P2PLink> rxHandler = null;
+
 	public AuthenticatedPerfectLink(InetSocketAddress local, InetSocketAddress remote, SecretKey ownKey, SecretKey remoteKey)
 			throws SocketException, NoSuchAlgorithmException, InvalidKeyException {
-		super(local, remote);
-
 		lower = new StubbornLink(local, remote);
-		lower.rxHandler = this::internalRxHandler;
+		lower.SetHandler(this::internalRxHandler);
 
 		outgoing_mac = Mac.getInstance("HmacSHA256");
 		incoming_mac = Mac.getInstance("HmacSHA256");
@@ -40,7 +41,10 @@ public class AuthenticatedPerfectLink extends P2PLink {
 			throw new RuntimeException("I fucked up");
 	}
 
-	@Override
+	public void SetHandler(BiConsumer<byte[], P2PLink> rxHandler) {
+		this.rxHandler = rxHandler;
+	}
+
 	public void Transmit(byte[] data) {
 		long seq = txSeqNum++;
 

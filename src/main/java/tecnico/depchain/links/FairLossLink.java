@@ -2,16 +2,20 @@ package tecnico.depchain.links;
 
 import java.net.InetSocketAddress;
 import java.net.SocketException;
+import java.util.function.BiConsumer;
 import java.net.DatagramSocket;
 import java.io.IOException;
 import java.net.DatagramPacket;
 
-public class FairLossLink extends P2PLink implements Runnable {
+public class FairLossLink implements P2PLink, Runnable {
 	private DatagramSocket sock;
 	private Thread receiverThread;
+	private InetSocketAddress remote;
+
+	private BiConsumer<byte[], P2PLink> rxHandler = null;
 
 	public FairLossLink(InetSocketAddress local, InetSocketAddress remote) throws SocketException {
-		super(local, remote);
+		this.remote = remote;
 
 		sock = new DatagramSocket(local); // FIXME: Never closed
 
@@ -20,7 +24,10 @@ public class FairLossLink extends P2PLink implements Runnable {
 		receiverThread.start();
 	}
 
-	@Override
+	public void SetHandler(BiConsumer<byte[], P2PLink> rxHandler) {
+		this.rxHandler = rxHandler;
+	}
+
 	public void Transmit(byte[] data) {
 		var packet = new DatagramPacket(data, data.length, remote);
 		try {

@@ -40,10 +40,10 @@ public class AuthenticatedPerfectLinkTest {
 		CountDownLatch latch = new CountDownLatch(1);
 		AtomicReference<byte[]> received = new AtomicReference<>();
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			received.set(data);
 			latch.countDown();
-		};
+		});
 
 		byte[] message = "Hello authenticated world".getBytes();
 		linkA.Transmit(message);
@@ -67,10 +67,10 @@ public class AuthenticatedPerfectLinkTest {
 		CountDownLatch latch = new CountDownLatch(messageCount);
 		java.util.Set<String> receivedMessages = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			receivedMessages.add(new String(data));
 			latch.countDown();
-		};
+		});
 
 		for (int i = 0; i < messageCount; i++) {
 			linkA.Transmit(("Msg " + i).getBytes());
@@ -100,14 +100,14 @@ public class AuthenticatedPerfectLinkTest {
 		AtomicReference<byte[]> receivedByA = new AtomicReference<>();
 		AtomicReference<byte[]> receivedByB = new AtomicReference<>();
 
-		linkA.rxHandler = (data, link) -> {
+		linkA.SetHandler((data, link) -> {
 			receivedByA.set(data);
 			latchA.countDown();
-		};
-		linkB.rxHandler = (data, link) -> {
+		});
+		linkB.SetHandler((data, link) -> {
 			receivedByB.set(data);
 			latchB.countDown();
-		};
+		});
 
 		linkA.Transmit("A says hi".getBytes());
 		linkB.Transmit("B says hi".getBytes());
@@ -133,9 +133,9 @@ public class AuthenticatedPerfectLinkTest {
 
 		CountDownLatch latch = new CountDownLatch(1);
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			latch.countDown(); // Should NOT be called
-		};
+		});
 
 		linkA.Transmit("This should be rejected".getBytes());
 
@@ -158,10 +158,10 @@ public class AuthenticatedPerfectLinkTest {
 		AtomicInteger deliveryCount = new AtomicInteger(0);
 		CountDownLatch firstDelivery = new CountDownLatch(1);
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			deliveryCount.incrementAndGet();
 			firstDelivery.countDown();
-		};
+		});
 
 		// Send a single message — stubborn link will retransmit it multiple times
 		// but AuthenticatedPerfectLink should deliver it exactly once
@@ -196,10 +196,10 @@ public class AuthenticatedPerfectLinkTest {
 			binaryData[i] = (byte) i;
 		}
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			received.set(data);
 			latch.countDown();
-		};
+		});
 
 		linkA.Transmit(binaryData);
 

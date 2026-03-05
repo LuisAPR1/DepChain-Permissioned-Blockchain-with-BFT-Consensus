@@ -29,10 +29,10 @@ public class StubbornLinkTest {
 		CountDownLatch latch = new CountDownLatch(1);
 		AtomicReference<byte[]> received = new AtomicReference<>();
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			received.set(data);
 			latch.countDown();
-		};
+		});
 
 		byte[] message = "Stubborn hello".getBytes();
 		linkA.Transmit(message);
@@ -53,10 +53,10 @@ public class StubbornLinkTest {
 		CountDownLatch latch = new CountDownLatch(messageCount);
 		Set<String> receivedMessages = ConcurrentHashMap.newKeySet();
 
-		linkB.rxHandler = (data, link) -> {
+		linkB.SetHandler((data, link) -> {
 			receivedMessages.add(new String(data));
 			latch.countDown();
-		};
+		});
 
 		for (int i = 0; i < messageCount; i++) {
 			linkA.Transmit(("Message " + i).getBytes());
@@ -83,14 +83,14 @@ public class StubbornLinkTest {
 		AtomicReference<byte[]> receivedByA = new AtomicReference<>();
 		AtomicReference<byte[]> receivedByB = new AtomicReference<>();
 
-		linkA.rxHandler = (data, link) -> {
+		linkA.SetHandler((data, link) -> {
 			receivedByA.set(data);
 			latchA.countDown();
-		};
-		linkB.rxHandler = (data, link) -> {
+		});
+		linkB.SetHandler((data, link) -> {
 			receivedByB.set(data);
 			latchB.countDown();
-		};
+		});
 
 		linkA.Transmit("From A".getBytes());
 		linkB.Transmit("From B".getBytes());
