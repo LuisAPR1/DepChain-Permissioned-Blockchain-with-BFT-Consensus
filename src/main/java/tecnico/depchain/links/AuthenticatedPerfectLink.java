@@ -7,7 +7,6 @@ import java.util.Set;
 import java.util.HashSet;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.security.PublicKey;
 
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
@@ -24,7 +23,7 @@ public class AuthenticatedPerfectLink extends P2PLink {
 	private long highWaterMark = -1;
 	private Set<Long> outOfOrder = new HashSet<>();
 
-	public AuthenticatedPerfectLink(InetSocketAddress local, InetSocketAddress remote, SecretKey ownKey, PublicKey remoteKey)
+	public AuthenticatedPerfectLink(InetSocketAddress local, InetSocketAddress remote, SecretKey ownKey, SecretKey remoteKey)
 			throws SocketException, NoSuchAlgorithmException, InvalidKeyException {
 		super(local, remote);
 

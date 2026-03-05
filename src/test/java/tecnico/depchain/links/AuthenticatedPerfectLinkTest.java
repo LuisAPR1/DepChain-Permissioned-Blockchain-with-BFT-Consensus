@@ -29,13 +29,13 @@ public class AuthenticatedPerfectLinkTest {
 		InetSocketAddress addrB = new InetSocketAddress(HOST, 18002);
 
 		// Two shared secrets: one per direction
-		SecretKey keyAtoB = generateKey();
-		SecretKey keyBtoA = generateKey();
+		SecretKey keyA = generateKey();
+		SecretKey keyB = generateKey();
 
-		// A sends with keyAtoB, verifies incoming with keyBtoA
-		AuthenticatedPerfectLink linkA = new AuthenticatedPerfectLink(addrA, addrB, keyAtoB, keyBtoA);
-		// B sends with keyBtoA, verifies incoming with keyAtoB
-		AuthenticatedPerfectLink linkB = new AuthenticatedPerfectLink(addrB, addrA, keyBtoA, keyAtoB);
+		// A sends with keyA, verifies incoming with keyB
+		AuthenticatedPerfectLink linkA = new AuthenticatedPerfectLink(addrA, addrB, keyA, keyB);
+		// B sends with keyB, verifies incoming with keyA
+		AuthenticatedPerfectLink linkB = new AuthenticatedPerfectLink(addrB, addrA, keyB, keyA);
 
 		CountDownLatch latch = new CountDownLatch(1);
 		AtomicReference<byte[]> received = new AtomicReference<>();
@@ -57,11 +57,11 @@ public class AuthenticatedPerfectLinkTest {
 		InetSocketAddress addrA = new InetSocketAddress(HOST, 18003);
 		InetSocketAddress addrB = new InetSocketAddress(HOST, 18004);
 
-		SecretKey keyAtoB = generateKey();
-		SecretKey keyBtoA = generateKey();
+		SecretKey keyA = generateKey();
+		SecretKey keyB = generateKey();
 
-		AuthenticatedPerfectLink linkA = new AuthenticatedPerfectLink(addrA, addrB, keyAtoB, keyBtoA);
-		AuthenticatedPerfectLink linkB = new AuthenticatedPerfectLink(addrB, addrA, keyBtoA, keyAtoB);
+		AuthenticatedPerfectLink linkA = new AuthenticatedPerfectLink(addrA, addrB, keyA, keyB);
+		AuthenticatedPerfectLink linkB = new AuthenticatedPerfectLink(addrB, addrA, keyB, keyA);
 
 		int messageCount = 5;
 		CountDownLatch latch = new CountDownLatch(messageCount);
