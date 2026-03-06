@@ -14,27 +14,22 @@ import tecnico.depchain.DepchainUtils;
 // ACKs are empty messages only with the received message ID
 // Consequently, empty messages are not allowed
 
-public class StubbornLink implements P2PLink, Runnable {
+public class StubbornLink extends P2PLink implements Runnable {
 	private long txCounter = 0;
 	private FairLossLink lower;
-
-	private BiConsumer<byte[], P2PLink> rxHandler = null;
 
 	// Stubborn message sending
 	private NavigableMap<Long, byte[]> pendingMsgs = new TreeMap<>();
 	private Thread stubbornThread;
 
-	public StubbornLink(InetSocketAddress local, InetSocketAddress remote) throws SocketException {
-		lower = new FairLossLink(local, remote);
-		lower.SetHandler(this::internalRxHandler);
+	public StubbornLink(BiConsumer<byte[], P2PLink> rxHandler, InetSocketAddress local, InetSocketAddress remote) throws SocketException {
+		super(rxHandler);
+
+		lower = new FairLossLink(this::internalRxHandler, local, remote);
 
 		// Start stubborn thread
 		stubbornThread = new Thread(this);
 		stubbornThread.start();
-	}
-
-	public void SetHandler(BiConsumer<byte[], P2PLink> rxHandler) {
-		this.rxHandler = rxHandler;
 	}
 
 	@Override

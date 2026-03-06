@@ -7,14 +7,14 @@ import java.net.DatagramSocket;
 import java.io.IOException;
 import java.net.DatagramPacket;
 
-public class FairLossLink implements P2PLink, Runnable {
+public class FairLossLink extends P2PLink implements Runnable {
 	private DatagramSocket sock;
 	private Thread receiverThread;
 	private InetSocketAddress remote;
 
-	private BiConsumer<byte[], P2PLink> rxHandler = null;
+	public FairLossLink(BiConsumer<byte[], P2PLink> rxHandler, InetSocketAddress local, InetSocketAddress remote) throws SocketException {
+		super(rxHandler);
 
-	public FairLossLink(InetSocketAddress local, InetSocketAddress remote) throws SocketException {
 		this.remote = remote;
 
 		sock = new DatagramSocket(local); // FIXME: Never closed
@@ -22,10 +22,6 @@ public class FairLossLink implements P2PLink, Runnable {
 		// Start receiver thread
 		receiverThread = new Thread(this);
 		receiverThread.start();
-	}
-
-	public void SetHandler(BiConsumer<byte[], P2PLink> rxHandler) {
-		this.rxHandler = rxHandler;
 	}
 
 	public void Transmit(byte[] data) {

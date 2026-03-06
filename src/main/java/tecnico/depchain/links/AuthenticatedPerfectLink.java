@@ -17,19 +17,18 @@ import javax.crypto.SecretKey;
 // Deduplicates messages to guarantee at-most-once delivery
 // NOTE: Delivery order is NOT implemented here. Consider adding it?
 
-public class AuthenticatedPerfectLink implements P2PLink {
+public class AuthenticatedPerfectLink extends P2PLink {
 	private StubbornLink lower;
 	private Mac outgoing_mac, incoming_mac;
 	private long txSeqNum = 0;
 	private long highWaterMark = -1;
 	private Set<Long> outOfOrder = new HashSet<>();
 
-	private BiConsumer<byte[], P2PLink> rxHandler = null;
-
-	public AuthenticatedPerfectLink(InetSocketAddress local, InetSocketAddress remote, SecretKey ownKey, SecretKey remoteKey)
+	public AuthenticatedPerfectLink(BiConsumer<byte[], P2PLink> rxHandler, InetSocketAddress local, InetSocketAddress remote, SecretKey ownKey, SecretKey remoteKey)
 			throws SocketException, NoSuchAlgorithmException, InvalidKeyException {
-		lower = new StubbornLink(local, remote);
-		lower.SetHandler(this::internalRxHandler);
+		super(rxHandler);
+
+		lower = new StubbornLink(this::internalRxHandler, local, remote);
 
 		outgoing_mac = Mac.getInstance("HmacSHA256");
 		incoming_mac = Mac.getInstance("HmacSHA256");
@@ -39,10 +38,6 @@ public class AuthenticatedPerfectLink implements P2PLink {
 		// Make sure MAC size is the expected
 		if (outgoing_mac.getMacLength() != 32)
 			throw new RuntimeException("I fucked up");
-	}
-
-	public void SetHandler(BiConsumer<byte[], P2PLink> rxHandler) {
-		this.rxHandler = rxHandler;
 	}
 
 	public void Transmit(byte[] data) {
