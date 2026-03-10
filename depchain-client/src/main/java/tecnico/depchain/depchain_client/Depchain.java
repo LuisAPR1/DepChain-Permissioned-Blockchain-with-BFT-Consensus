@@ -4,9 +4,9 @@ import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import javax.crypto.SecretKey;
 
@@ -14,9 +14,15 @@ import tecnico.depchain.depchain_common.broadcasts.BestEffortBroadcast;
 import tecnico.depchain.depchain_common.messages.ConfirmMessage;
 import tecnico.depchain.depchain_common.messages.StringMessage;
 
+enum RequestStatus {
+	SENT,
+	ACCEPTED,
+	REJECTED
+}
+
 public class Depchain {
 	private BestEffortBroadcast broadcast;
-	private Set<Long> pendingMessages = new HashSet<>();
+	private Map<Long, RequestStatus> pendingMessages = new HashMap<>();
 
 	public Depchain(List<InetSocketAddress> locals, SecretKey ownKey, List<InetSocketAddress> remotes, List<SecretKey> remoteKeys)
 		throws SocketException, NoSuchAlgorithmException, InvalidKeyException, IllegalArgumentException {
@@ -27,24 +33,25 @@ public class Depchain {
 		StringMessage msg = new StringMessage(content);
 		Long seqNum = msg.getSeqNum();
 		synchronized (pendingMessages)
-		{ pendingMessages.add(seqNum); }
+		{ pendingMessages.put(seqNum, RequestStatus.SENT); }
 
 		broadcast.broadcast(msg.serialize());
 
-		//HACK: Waits until confirmation arrives
-		//Stuck forever if it never does
-
-		//TODO: Handle differently the accepted value of the ConfirmMessage
-
+		//FIXME: Stuck forever if confirmation never arrives
 		//Wait for reply msg
 		do {
 			try
 			{ pendingMessages.wait(); }
 			catch (InterruptedException e)
 			{ /* Ignore */ }
-		} while (pendingMessages.contains(seqNum));
+		} while (pendingMessages.get(seqNum) == RequestStatus.SENT);
 
-		return true;
+		boolean accepted = pendingMessages.get(seqNum) == RequestStatus.ACCEPTED;
+
+		synchronized (pendingMessages)
+		{ pendingMessages.remove(seqNum); }
+
+		return accepted;
 	}
 
 	private void rxHandler(byte[] data, InetSocketAddress remote) {
@@ -52,7 +59,7 @@ public class Depchain {
 
 		ConfirmMessage msg = ConfirmMessage.deserialize(data);
 		synchronized (pendingMessages)
-		{ pendingMessages.remove(msg.getSeqNum()); }
+		{ pendingMessages.replace(msg.getSeqNum(), msg.getAccepted() ? RequestStatus.ACCEPTED : RequestStatus.REJECTED); }
 		pendingMessages.notifyAll();
 	}
 }
