@@ -24,7 +24,7 @@ public class DepchainUtils {
 			digest = MessageDigest.getInstance("MD5").digest(data);
 		} catch (NoSuchAlgorithmException e)
 		{
-			return (long)0; //Won't happen
+			return (long)0; //Won't happen (we hope)
 		}
 
 		return (long)digest[0] |

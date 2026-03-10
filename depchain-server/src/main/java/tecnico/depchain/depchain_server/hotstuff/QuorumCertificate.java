@@ -7,13 +7,7 @@ import java.util.Set;
 
 import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
 
-/**
- * A Quorum Certificate aggregates (n-f) votes for a specific (type, view, node) tuple.
- *
- * <p>For Byzantine fault tolerance (Step 5), each vote carries an Ed25519 signature
- * over the canonical vote data (type, viewNumber, nodeHash). The QC stores these
- * individual signatures so any replica can independently verify the certificate.
- */
+
 public class QuorumCertificate implements Serializable {
 	private MsgType type;
 	private int viewNumber;
@@ -57,12 +51,7 @@ public class QuorumCertificate implements Serializable {
 		return signatures;
 	}
 
-	/**
-	 * Verify this QC using the best available method:
-	 * 1. BLS Threshold signature verification – O(1) mathematical pairing.
-	 * 2. BLS Individual signatures (fallback)
-	 * 3. Individual Ed25519 signatures (fallback for crash-only mode)
-	 */
+
 	public boolean verify(CryptoService crypto, ThresholdCrypto tc, int quorumSize) {
 		if (node == null) return false;
 

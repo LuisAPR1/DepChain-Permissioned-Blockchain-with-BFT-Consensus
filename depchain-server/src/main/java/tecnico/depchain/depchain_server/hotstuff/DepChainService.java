@@ -10,10 +10,6 @@ import java.util.function.Consumer;
 
 import javax.crypto.SecretKey;
 
-/**
- * Stage 1 Blockchain logic. Acts as a bridge between the client requests
- * and the BFT consensus engine, maintaining an append-only in-memory blockchain.
- */
 public class DepChainService implements ConsensusUpcall {
     private final int replicaID;
     private final int numReplicas;
@@ -49,14 +45,10 @@ public class DepChainService implements ConsensusUpcall {
 		this.onDecide = callback;
 	}
 
-    /**
-     * Upcall triggered by the HotStuff layer when a block reaches DECIDE.
-     * @param payload The original string added by the client.
-     */
-    @Override
+    @Override 
     public void onDecide(String payload) {
         blockchain.add(payload);
-        System.out.println("Bloco decidido e adicionado à blockchain: " + payload);
+        System.out.println("Block decided and added to the blockchain: " + payload);
         if (onDecide != null)
             onDecide(payload);
     }
@@ -66,15 +58,11 @@ public class DepChainService implements ConsensusUpcall {
      * Evaluates if this node is the current leader and proposes to consensus.
      */
    public void handleClientRequest(String requestPayload) {
-    // 1. Defesa de Idempotência: O servidor protege-se de clientes que fazem spam (retries UDP)
     if (this.blockchain.contains(requestPayload)) {
-        System.err.println("[DepChainService-" + replicaID + "] Pedido ignorado. A transação já está na blockchain: '" + requestPayload + "'");
-        // Nota para o Passo 6: Aqui o teu servidor deve re-enviar o ACK UDP ao cliente
-        // para o avisar que a transação já foi processada com sucesso no passado.
+        System.err.println("[DepChainService-" + replicaID + "] Request ignored. The transaction is already on the blockchain: '" + requestPayload + "'");
         return;
     }
 
-    // 2. Lógica de encaminhamento para o Líder
     int currentLeader = hotStuff.getCurrentView() % numReplicas;
     if (replicaID == currentLeader) {
         System.err.println("[DepChainService-" + replicaID + "] Proposing client request '" + requestPayload + "' for view " + hotStuff.getCurrentView());

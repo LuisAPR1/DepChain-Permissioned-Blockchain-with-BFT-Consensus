@@ -15,7 +15,6 @@ import javax.crypto.SecretKey;
 // Authenticated Perfect link implementation
 // Prepends MACs to messages for authenticity validation
 // Deduplicates messages to guarantee at-most-once delivery
-// NOTE: Delivery order is NOT implemented here. Consider adding it?
 
 public class AuthenticatedPerfectLink extends P2PLink {
 	private StubbornLink lower;
@@ -24,7 +23,6 @@ public class AuthenticatedPerfectLink extends P2PLink {
 	private long highWaterMark = -1;
 	private Set<Long> outOfOrder = new HashSet<>();
 
-	//TODO: MAC keys cannot be set in global knowledge (gen and send)
 	public AuthenticatedPerfectLink(
 			BiConsumer<byte[], InetSocketAddress> rxHandler, InetSocketAddress local, InetSocketAddress remote,
 			SecretKey ownKey, SecretKey remoteKey)
@@ -33,7 +31,6 @@ public class AuthenticatedPerfectLink extends P2PLink {
 
 		lower = new StubbornLink(this::internalRxHandler, local, remote);
 
-		//TODO: Generate keys at start
 		outgoing_mac = Mac.getInstance("HmacSHA256");
 		incoming_mac = Mac.getInstance("HmacSHA256");
 		outgoing_mac.init(ownKey);

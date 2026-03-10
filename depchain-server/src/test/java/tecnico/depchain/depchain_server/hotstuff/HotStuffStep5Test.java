@@ -22,7 +22,7 @@ import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
 /**
  * Step 5 tests: Byzantine fault tolerance.
  *
- * <p>Byzantine replicas are simulated by giving them a mismatched Ed25519 key pair
+ * Byzantine replicas are simulated by giving them a mismatched Ed25519 key pair
  * (different private key than what other replicas expect). This causes their
  * vote signatures to be cryptographically invalid from the perspective of all
  * honest replicas. The system must still reach consensus using the honest quorum.
@@ -38,7 +38,7 @@ public class HotStuffStep5Test {
 	}
 
 	/**
-	 * Create n replicas where {@code byzantineIds} replicas are given mismatched
+	 * Create n replicas where replicas are given mismatched
 	 * Ed25519 keys (their signatures will be invalid to everyone else).
 	 * All replicas receive threshold crypto params for QC threshold signatures.
 	 */
@@ -91,7 +91,6 @@ public class HotStuffStep5Test {
 		try { Thread.sleep(500); } catch (InterruptedException ignored) {}
 	}
 
-	// ==================== Byzantine Fault Tolerance Tests ====================
 
 	/**
 	 * 1 Byzantine replica (wrong keys) out of 4.
@@ -191,7 +190,6 @@ public class HotStuffStep5Test {
 	@Test
 	void testByzantineLeaderStillAllowsProgress() throws Exception {
 		int n = 4;
-		// Replica 2 is Byzantine. View 2 leader = 2%4 = 2 (Byzantine leader).
 		HotStuff[] replicas = createReplicasWithByzantine(n, BASE_PORT + 200, 2);
 
 		try {
@@ -317,7 +315,6 @@ public class HotStuffStep5Test {
 		}
 	}
 
-	// ==================== Intrusive Byzantine Tests (message filter) ====================
 
 	/**
 	 * Byzantine replica silently drops all its vote messages.
@@ -527,8 +524,6 @@ public class HotStuffStep5Test {
 		}
 	}
 
-	// ==================== NEW_VIEW / JustifyQC forgery tests ====================
-
 	/**
 	 * Byzantine replica injects a fake QC with a high view number into its
 	 * NEW_VIEW message. The leader must verify QCs before selecting highQC,
@@ -599,7 +594,6 @@ public class HotStuffStep5Test {
 	void testFilterForgesJustifyQCInPrepare() throws Exception {
 		int n = 4;
 		// Replica 2 is "Byzantine" (will forge justifyQC in PREPARE broadcasts).
-		// View 2 leader = 2%4 = 2.
 		int byzantineId = 2;
 		HotStuff[] replicas = createHonestReplicas(n, BASE_PORT + 1000);
 
@@ -651,7 +645,6 @@ public class HotStuffStep5Test {
 		}
 	}
 
-	// ==================== Combined / hardening tests ====================
 
 	/**
 	 * Combined Byzantine attack: one replica simultaneously has wrong crypto keys

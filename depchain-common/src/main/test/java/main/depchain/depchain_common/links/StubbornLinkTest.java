@@ -111,7 +111,7 @@ public class StubbornLinkTest {
 		InetSocketAddress addrA = new InetSocketAddress(HOST, 17009);
 		InetSocketAddress addrB = new InetSocketAddress(HOST, 17010);
 
-		// Use raw UDP socket on B's port — this way no automatic ACKs are sent
+		// Use raw UDP socket on B's port, this way no automatic ACKs are sent
 		DatagramSocket rawB = new DatagramSocket(new InetSocketAddress(HOST, 17010));
 		rawB.setSoTimeout(100);
 
@@ -164,7 +164,7 @@ public class StubbornLinkTest {
 				rawB.receive(new DatagramPacket(rxBuffer, rxBuffer.length));
 				afterAckCount++;
 			} catch (SocketTimeoutException e) {
-				// expected — no more messages
+				// expected,no more messages
 			}
 		}
 

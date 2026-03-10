@@ -73,9 +73,7 @@ public class CryptoService {
 		}
 	}
 
-	/**
-	 * Verify a signature produced by the replica with the given ID.
-	 */
+	
 	public boolean verify(int senderId, byte[] data, byte[] signature) {
 		if (senderId < 0 || senderId >= publicKeys.size() || signature == null)
 			return false;
@@ -89,10 +87,6 @@ public class CryptoService {
 		}
 	}
 
-	/**
-	 * Build the canonical byte payload that is signed for a HotStuff vote.
-	 * Matches the paper: tsign_r(⟨m.type, m.viewNumber, m.node⟩).
-	 */
 	public static byte[] buildVoteData(MsgType type, int viewNumber, byte[] nodeHash) {
 		int hashLen = (nodeHash != null) ? nodeHash.length : 0;
 		ByteBuffer buf = ByteBuffer.allocate(1 + 4 + hashLen);

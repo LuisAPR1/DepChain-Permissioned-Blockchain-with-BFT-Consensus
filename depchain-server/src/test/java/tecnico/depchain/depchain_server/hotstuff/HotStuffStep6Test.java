@@ -187,7 +187,7 @@ public class HotStuffStep6Test {
 			int leaderId = currentView % n;
 			int nonLeaderId = (leaderId + 1) % n;
 
-			// Submit to a non-leader — it should be ignored
+			// Submit to a non-leader (it should be ignored)
 			services[nonLeaderId].handleClientRequest("NonLeaderTx");
 			Thread.sleep(2000);
 
@@ -197,7 +197,7 @@ public class HotStuffStep6Test {
 						"Replica " + i + " should have empty blockchain (non-leader cannot propose)");
 			}
 
-			// Now submit to the actual leader — it should succeed
+			// Now submit to the actual leader (it should succeed)
 			submitAndWait(services, "NonLeaderTx", 1, n);
 
 			for (int i = 0; i < n; i++) {

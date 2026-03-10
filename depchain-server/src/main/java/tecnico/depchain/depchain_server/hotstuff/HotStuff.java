@@ -28,30 +28,23 @@ public class HotStuff {
 	private final CryptoService crypto;
 	private final ThresholdCrypto thresholdCrypto;
 
-	// Protocol state (Algorithm 2)
 	private volatile int currentView = 1;
 	private QuorumCertificate prepareQC = null;
 	private QuorumCertificate lockedQC = null;
 	private TreeNode votedNodeThisView = null;
 
-	// Tree of proposals
 	private final Map<String, TreeNode> nodeStore = new HashMap<>();
 
-	// Decided commands (the "blockchain")
 	private final List<String> decidedCommands = new ArrayList<>();
     private final List<String> newlyDecidedThisView = new ArrayList<>();
-
-	// Pending commands to propose (set by upper layer)
 	private final BlockingQueue<String> pendingCommands = new LinkedBlockingQueue<>();
 
-	// Message queue for sequential processing
 	private final BlockingQueue<Message> messageQueue = new LinkedBlockingQueue<>();
 	private final List<Message> outOfOrderBuffer = new ArrayList<>();
 
-	// Callback for decided commands
 	private Consumer<String> onDecide = null;
-	private final ConsensusUpcall upcall;
-
+	private final ConsensusUpcall upcall; 
+ 
 	// Outgoing message filter for Byzantine testing (Step 5).
 	// Applied before every send/broadcast. Return null to drop the message.
 	// Takes (destinationId, originalMessage) and returns modifiedMessage.
@@ -61,7 +54,6 @@ public class HotStuff {
 	private Thread protocolThread;
 	private volatile boolean running = false;
 
-	// --- View timeout / Pacemaker (Step 4) ---
 	private static final long DEFAULT_TIMEOUT_MS = 5000;
 	private static final long MAX_TIMEOUT_MS = 60000;
 	private long baseTimeoutMs = DEFAULT_TIMEOUT_MS;
@@ -111,7 +103,6 @@ public class HotStuff {
 		broadcast = new BestEffortBroadcast(this::handleMsg, this::handleMsg, locals, ownKey, remotes, peerKeys);
 	}
 
-	/** Backward-compatible constructor (no upcall instance). */
 	public HotStuff(
 			int replicaID, String host, int basePort, int numReplicas,
 			List<SecretKey> keys, CryptoService crypto, ThresholdCrypto thresholdCrypto)
@@ -119,7 +110,6 @@ public class HotStuff {
 		this(replicaID, host, basePort, numReplicas, keys, crypto, thresholdCrypto, null);
 	}
 
-	/** Backward-compatible constructor (no threshold crypto). */
 	public HotStuff(
 			int replicaID, String host, int basePort, int numReplicas,
 			List<SecretKey> keys, CryptoService crypto)
@@ -127,7 +117,6 @@ public class HotStuff {
 		this(replicaID, host, basePort, numReplicas, keys, crypto, null, null);
 	}
 
-	// --- Public interface ---
 
 	public void start() {
 		running = true;
@@ -166,16 +155,11 @@ public class HotStuff {
 		this.viewTimeoutMs = timeoutMs;
 	}
 
-	/**
-	 * Install a filter applied to every outgoing message before it is sent.
-	 * The filter may modify the message or return null to suppress it entirely.
-	 * Intended for Byzantine fault injection during testing.
-	 */
+
 	public void setOutgoingFilter(BiFunction<Integer, Message, Message> filter) {
 		this.outgoingFilter = filter;
 	}
 
-	// --- Network layer ---
 
 	private void handleMsg(byte[] data, InetSocketAddress remote) {
 		byte[] msgBytes = new byte[data.length - 1];
@@ -183,7 +167,7 @@ public class HotStuff {
 
 		Message msg = Message.deserialize(msgBytes);
 		if (msg != null) {
-			// Step 5: Verify the global message signature
+			// Verify the global message signature
 			if (msg.getMessageSignature() != null) {
 				if (!crypto.verify(msg.getSenderId(), msg.getSignableBytes(), msg.getMessageSignature())) {
 					System.err.println("[HotStuff-" + replicaID + "] ERROR: Global signature failed for msg from " + msg.getSenderId() + " type=" + msg.getType());
@@ -220,7 +204,6 @@ public class HotStuff {
 		}
 	}
 
-	// --- Timeout helpers ---
 
 	private void startViewTimer() {
 		viewDeadline = System.currentTimeMillis() + viewTimeoutMs;
@@ -230,12 +213,7 @@ public class HotStuff {
 		return Math.max(0, viewDeadline - System.currentTimeMillis());
 	}
 
-	// --- Protocol helpers ---
 
-	/**
-	 * Pull a message of the given type and view from the queue.
-	 * Returns null if the view deadline expires before a matching message arrives.
-	 */
 	private Message pullMessage(MsgType type, int viewNumber) throws InterruptedException {
 		for (int i = 0; i < outOfOrderBuffer.size(); i++) {
 			Message msg = outOfOrderBuffer.get(i);
@@ -317,9 +295,7 @@ public class HotStuff {
 		return res;
 	}
 
-	/**
-	 * safeNode predicate (Algorithm 1, lines 25-27).
-	 */
+
 	private boolean safeNode(TreeNode node, QuorumCertificate qc) {
 		if (lockedQC == null)
 			return true;
@@ -369,7 +345,6 @@ public class HotStuff {
 		}
 	}
 
-	// --- Protocol main loop (with timeout / nextView interrupt) ---
 
 	private void protocolLoop() {
 		while (running) {
@@ -397,7 +372,6 @@ public class HotStuff {
 					currentView++;
 					votedNodeThisView = null;
 
-                    // Trigger upcalls AFTER view transition!
                     List<String> toUpcall = new ArrayList<>(newlyDecidedThisView);
                     newlyDecidedThisView.clear();
                     for (String cmd : toUpcall) {
@@ -411,7 +385,7 @@ public class HotStuff {
 
 	/**
 	 * Send NEW_VIEW carrying our highest prepareQC to the next view's leader.
-	 * Called on both successful completion and timeout (Algorithm 2, line 36).
+	 * Called on both successful completion and timeout.
 	 */
 	private void sendNewViewToNextLeader() {
 		int nextLeader = getLeader(currentView + 1);
@@ -420,11 +394,9 @@ public class HotStuff {
 
 	/** @return true if the view completed successfully, false on timeout */
 	private boolean runLeaderPhase() throws InterruptedException {
-		// === PREPARE phase (leader) ===
 		QuorumCertificate highQC = null;
 
 		if (currentView == 1) {
-			// Bootstrap: no NEW_VIEW messages needed
 		} else {
 			Map<Integer, Message> newViews = new HashMap<>();
 
@@ -461,7 +433,6 @@ public class HotStuff {
 
 		boolean selfVote = safeNode(proposal, highQC);
 
-		// === Collect PREPARE votes -> form prepareQC ===
 		QuorumCertificate newPrepareQC = new QuorumCertificate(MsgType.PREPARE, currentView, proposal);
 		if (selfVote) {
 			byte[] selfSig;
@@ -485,7 +456,6 @@ public class HotStuff {
 			}
 		}
 
-		// === PRE-COMMIT phase ===
 		addThresholdSignature(newPrepareQC, proposal.getHash());
 		prepareQC = newPrepareQC;
 		broadcastMessage(makeMsg(MsgType.PRE_COMMIT, null, prepareQC));
@@ -508,7 +478,6 @@ public class HotStuff {
 			}
 		}
 
-		// === COMMIT phase ===
 		addThresholdSignature(newPrecommitQC, proposal.getHash());
 		lockedQC = newPrecommitQC;
 		broadcastMessage(makeMsg(MsgType.COMMIT, null, newPrecommitQC));
@@ -531,7 +500,6 @@ public class HotStuff {
 			}
 		}
 
-		// === DECIDE phase ===
 		addThresholdSignature(newCommitQC, proposal.getHash());
 		broadcastMessage(makeMsg(MsgType.DECIDE, null, newCommitQC));
 		executeDecision(proposal);
@@ -554,7 +522,7 @@ public class HotStuff {
 		// Equivocation protection: explicitly fail if already voted for a different proposal in this view
 		if (proposal != null) {
 			if (votedNodeThisView != null && !Arrays.equals(votedNodeThisView.getHash(), proposal.getHash())) {
-				return false; // Leader equivocated!
+				return false; 
 			}
 			votedNodeThisView = proposal;
 		}
@@ -594,7 +562,6 @@ public class HotStuff {
             System.err.println("[HotStuff-" + replicaID + "] Dropped PREPARE! extends=" + extendsFromJustify + ", safe=" + safe);
         }
 
-		// === PRE-COMMIT phase (replica) ===
 		Message preCommitMsg = pullMessage(MsgType.PRE_COMMIT, currentView);
 		if (preCommitMsg == null) return false;
 
@@ -609,7 +576,6 @@ public class HotStuff {
 			sendMessage(leader, makeVoteMsg(MsgType.PRE_COMMIT, proposal, null));
 		}
 
-		// === COMMIT phase (replica) ===
 		Message commitMsg = pullMessage(MsgType.COMMIT, currentView);
 		if (commitMsg == null) return false;
 
@@ -623,7 +589,6 @@ public class HotStuff {
 			sendMessage(leader, makeVoteMsg(MsgType.COMMIT, proposal, null));
 		}
 
-		// === DECIDE phase (replica) ===
 		Message decideMsg = pullMessage(MsgType.DECIDE, currentView);
 		if (decideMsg == null) return false;
 

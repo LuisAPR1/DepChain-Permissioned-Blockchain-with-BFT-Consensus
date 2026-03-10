@@ -153,7 +153,7 @@ public class AuthenticatedPerfectLinkTest {
 			firstDelivery.countDown();
 		}, addrB, addrA, keyBtoA, keyAtoB);
 
-		// Send a single message — stubborn link will retransmit it multiple times
+		// Send a single messagestubborn link will retransmit it multiple times
 		// but AuthenticatedPerfectLink should deliver it exactly once
 		linkA.transmit("Deliver me once".getBytes());
 

@@ -50,7 +50,6 @@ public class Depchain {
 
 	//Client msg handler
 	private static void rxHandler(byte[] data, InetSocketAddress sender) {
-		//HACK: Assumes clients only send StringMesssage
 
 		StringMessage msg = StringMessage.deserialize(data);
 
@@ -62,7 +61,6 @@ public class Depchain {
 		}
 		service.handleClientRequest(msg.getContent());
 
-		//TODO: How to handle case where command is not decided?
 	}
 
 	private static void onDecide(String command) {

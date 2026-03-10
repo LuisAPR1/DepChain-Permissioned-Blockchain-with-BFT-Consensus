@@ -25,13 +25,13 @@ public class ThresholdCrypto {
 	private final int replicaId;
 
 	private final Pairing pairing;
-	private final Element generator; // g in G1
-	private final Element globalPublicKey; // PK = g^s in G1
-	private final Element myPrivateShare; // sk_i in Zr
+	private final Element generator; 
+	private final Element globalPublicKey; 
+	private final Element myPrivateShare; 
 	private final int threshold;
 	private final int numReplicas;
 
-	private final Map<Integer, Element> publicShares; // PK_j = g^{sk_j} in G1
+	private final Map<Integer, Element> publicShares; 
 
 	public ThresholdCrypto(int replicaId, int threshold, int numReplicas,
 			String pairingParamsStr, byte[] generatorBytes, byte[] globalPublicKeyBytes,
@@ -74,10 +74,7 @@ public class ThresholdCrypto {
 		}
 	}
 
-	/**
-	 * Creates a BLS partial signature over the given data.
-	 * sig_i = H(m)^{sk_i}
-	 */
+
 	public byte[] signPartial(byte[] data) {
 		synchronized (pairing) {
 			Element h = hashToG1(data);
@@ -86,10 +83,7 @@ public class ThresholdCrypto {
 		}
 	}
 
-	/**
-	 * Verify an individual partial signature from a sender.
-	 * e(sig_i, g) == e(H(m), pk_i)
-	 */
+	
 	public boolean verifyPartial(int senderId, byte[] data, byte[] signatureBytes) {
 		if (data == null || signatureBytes == null) return false;
 		if (!publicShares.containsKey(senderId)) return false;
@@ -133,11 +127,10 @@ public class ThresholdCrypto {
 
 			for (int i : S) {
 				Element lambda = zr.newOneElement();
-				int xi = i + 1; // Evaluated at x = id + 1
+				int xi = i + 1; 
 				for (int j : S) {
 					if (i != j) {
 						int xj = j + 1;
-						// lambda_i = product (0 - xj) / (xi - xj)
 						Element num = zr.newElement(-xj);
 						Element den = zr.newElement(xi - xj);
 						den.invert();
@@ -155,10 +148,7 @@ public class ThresholdCrypto {
 		}
 	}
 
-	/**
-	 * Global verification of the threshold signature in O(1) pairings.
-	 * e(sig_{global}, g) == e(H(m), PK_{global})
-	 */
+	
 	public boolean verifyThreshold(byte[] data, byte[] thresholdSignatureBytes) {
 		if (data == null || thresholdSignatureBytes == null) return false;
 		try {
@@ -175,9 +165,7 @@ public class ThresholdCrypto {
 		}
 	}
 
-	// ==============================================
-	// Trusted Dealer Setup Methods (for testing / init)
-	// ==============================================
+
 
 	public static class DealerParams implements Serializable {
 		public String pairingParamsStr;
