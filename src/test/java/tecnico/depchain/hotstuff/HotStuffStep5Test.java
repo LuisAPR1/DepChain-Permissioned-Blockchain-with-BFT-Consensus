@@ -15,7 +15,7 @@ import javax.crypto.SecretKey;
 
 import org.junit.jupiter.api.Test;
 
-import com.weavechain.sig.ThresholdSigEd25519Params;
+
 
 import tecnico.depchain.hotstuff.Message.MsgType;
 
@@ -53,8 +53,8 @@ public class HotStuffStep5Test {
 
 		int f = (n - 1) / 3;
 		int threshold = 2 * f + 1;
-		ThresholdSigEd25519Params thresholdParams = ThresholdCrypto.generateParams(threshold, n);
-		byte[] thresholdPublicKey = thresholdParams.getPublicKey();
+		ThresholdCrypto.DealerParams dealerParams = ThresholdCrypto.generateParams(threshold, n);
+		byte[] thresholdPublicKey = dealerParams.globalPublicKey;
 
 		java.util.Set<Integer> byzantineSet = new java.util.HashSet<>();
 		for (int id : byzantineIds) byzantineSet.add(id);
@@ -70,7 +70,9 @@ public class HotStuffStep5Test {
 			} else {
 				crypto = new CryptoService(i, honestKeyPairs.get(i), publicKeys, thresholdPublicKey);
 			}
-			ThresholdCrypto tc = new ThresholdCrypto(i, thresholdParams, threshold, n);
+			ThresholdCrypto tc = new ThresholdCrypto(i, threshold, n, dealerParams.pairingParamsStr,
+					dealerParams.generator, dealerParams.globalPublicKey, dealerParams.privateShares.get(i),
+					dealerParams.publicShares);
 			replicas[i] = new HotStuff(i, HOST, basePort, n, new ArrayList<>(hmacKeys), crypto, tc);
 		}
 		return replicas;

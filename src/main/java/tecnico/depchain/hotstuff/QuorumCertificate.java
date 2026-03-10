@@ -53,24 +53,50 @@ public class QuorumCertificate implements Serializable {
 		return signatures.keySet();
 	}
 
+	public Map<Integer, byte[]> getSignatures() {
+		return signatures;
+	}
+
 	/**
 	 * Verify this QC using the best available method:
-	 * 1. Threshold signature verification – O(1), as described in the paper's
-	 *    tverify scheme (Section 3). Used when the leader has attached a
-	 *    threshold signature via tcombine after collecting n-f votes.
-	 * 2. Individual Ed25519 signature verification – O(n) fallback when no
-	 *    threshold signature is present (e.g., crash-only mode / Step 4).
+	 * 1. BLS Threshold signature verification – O(1) mathematical pairing.
+	 * 2. BLS Individual signatures (fallback)
+	 * 3. Individual Ed25519 signatures (fallback for crash-only mode)
 	 */
-	public boolean verify(CryptoService crypto, int quorumSize) {
+	public boolean verify(CryptoService crypto, ThresholdCrypto tc, int quorumSize) {
 		if (node == null) return false;
 
-		byte[] thresholdPubKey = crypto.getThresholdPublicKey();
-		if (thresholdPubKey != null && thresholdSignature != null
-				&& verifyThreshold(thresholdPubKey)) {
-			return true;
+		if (tc != null && thresholdSignature != null) {
+			byte[] voteData = CryptoService.buildVoteData(type, viewNumber, node.getHash());
+			if (tc.verifyThreshold(voteData, thresholdSignature)) {
+				return true;
+			}
+		}
+
+		if (tc != null) {
+			return verifyIndividualBLS(tc, quorumSize);
 		}
 
 		return verifyIndividual(crypto, quorumSize);
+	}
+
+	private boolean verifyIndividualBLS(ThresholdCrypto tc, int quorumSize) {
+		byte[] nodeHash = node.getHash();
+		int validCount = 0;
+		byte[] voteData = CryptoService.buildVoteData(type, viewNumber, nodeHash);
+
+		for (var entry : signatures.entrySet()) {
+			int voterId = entry.getKey();
+			byte[] sig = entry.getValue();
+
+			if (sig == null) continue;
+
+			if (tc.verifyPartial(voterId, voteData, sig)) {
+				validCount++;
+			}
+		}
+
+		return validCount >= quorumSize;
 	}
 
 	/**
@@ -101,13 +127,11 @@ public class QuorumCertificate implements Serializable {
 
 	/**
 	 * Verify the threshold signature against the shared public key.
-	 * This provides compact O(1) verification as described in the HotStuff paper's
-	 * tcombine/tverify scheme (Section 3, Cryptographic primitives).
 	 */
-	public boolean verifyThreshold(byte[] thresholdPublicKey) {
-		if (thresholdSignature == null || node == null || thresholdPublicKey == null) return false;
+	public boolean verifyThreshold(ThresholdCrypto tc, byte[] thresholdPublicKey) {
+		if (thresholdSignature == null || node == null || thresholdPublicKey == null || tc == null) return false;
 		byte[] voteData = CryptoService.buildVoteData(type, viewNumber, node.getHash());
-		return ThresholdCrypto.verify(thresholdPublicKey, voteData, thresholdSignature);
+		return tc.verifyThreshold(voteData, thresholdSignature);
 	}
 
 	public MsgType getType() { return type; }

@@ -261,7 +261,13 @@ public class HotStuff {
 
 	private Message makeVoteMsg(MsgType type, TreeNode node, QuorumCertificate qc) {
 		byte[] nodeHash = (node != null) ? node.getHash() : null;
-		byte[] sig = crypto.signVote(type, currentView, nodeHash);
+		byte[] sig;
+		if (thresholdCrypto != null) {
+			byte[] voteData = CryptoService.buildVoteData(type, currentView, nodeHash);
+			sig = thresholdCrypto.signPartial(voteData);
+		} else {
+			sig = crypto.signVote(type, currentView, nodeHash);
+		}
 		return new Message(type, currentView, replicaID, node, qc, sig);
 	}
 
@@ -274,6 +280,10 @@ public class HotStuff {
 		int senderId = msg.getSenderId();
 		if (senderId < 0 || senderId >= numReplicas) return false;
 		if (senderId == replicaID) return false;
+		if (thresholdCrypto != null) {
+			byte[] voteData = CryptoService.buildVoteData(msg.getType(), msg.getViewNumber(), expectedNodeHash);
+			return thresholdCrypto.verifyPartial(senderId, voteData, msg.getPartialSignature());
+		}
 		return crypto.verifyVote(
 				senderId, msg.getType(), msg.getViewNumber(),
 				expectedNodeHash, msg.getPartialSignature());
@@ -319,15 +329,13 @@ public class HotStuff {
 	}
 
 	/**
-	 * After the leader collects n-f individually verified Ed25519 votes and forms
-	 * a QC, create a compact threshold signature via tcombine (paper Section 3).
-	 * Uses centralized signing when full threshold params are available.
+	 * After the leader collects n-f individually verified Partial BLS votes and forms
+	 * a QC, interpolate the partial shares to create a BLS threshold signature.
 	 */
 	private void addThresholdSignature(QuorumCertificate qc, byte[] nodeHash) {
-		if (thresholdCrypto == null || !thresholdCrypto.canSignCentralized()) return;
+		if (thresholdCrypto == null) return;
 		try {
-			byte[] voteData = CryptoService.buildVoteData(qc.getType(), qc.getViewNumber(), nodeHash);
-			byte[] sig = thresholdCrypto.signCentralized(voteData, qc.getVoterIds());
+			byte[] sig = thresholdCrypto.aggregateShares(qc.getSignatures());
 			qc.setThresholdSignature(sig);
 		} catch (Exception ignored) {
 		}
@@ -396,7 +404,7 @@ public class HotStuff {
 						&& qc.getType() == MsgType.PREPARE
 						&& qc.getViewNumber() > 0
 						&& qc.getViewNumber() < currentView
-						&& qc.verify(crypto, quorumSize)) {
+						&& qc.verify(crypto, thresholdCrypto, quorumSize)) {
 					if (highQC == null || qc.getViewNumber() > highQC.getViewNumber())
 						highQC = qc;
 				}
@@ -419,13 +427,21 @@ public class HotStuff {
 		// === Collect PREPARE votes -> form prepareQC ===
 		QuorumCertificate newPrepareQC = new QuorumCertificate(MsgType.PREPARE, currentView, proposal);
 		if (selfVote) {
-			byte[] selfSig = crypto.signVote(MsgType.PREPARE, currentView, proposal.getHash());
+			byte[] selfSig;
+			if (thresholdCrypto != null) {
+				byte[] voteData = CryptoService.buildVoteData(MsgType.PREPARE, currentView, proposal.getHash());
+				selfSig = thresholdCrypto.signPartial(voteData);
+			} else {
+				selfSig = crypto.signVote(MsgType.PREPARE, currentView, proposal.getHash());
+			}
 			newPrepareQC.addVote(replicaID, selfSig);
 		}
 
 		while (!newPrepareQC.hasQuorum(quorumSize)) {
 			Message msg = pullMessage(MsgType.PREPARE, currentView);
-			if (msg == null) return false;
+			if (msg == null) {
+				return false;
+			}
 			if (verifyVoteMsg(msg, proposal.getHash())) {
 				newPrepareQC.addVote(msg.getSenderId(), msg.getPartialSignature());
 			}
@@ -437,7 +453,13 @@ public class HotStuff {
 		broadcastMessage(makeMsg(MsgType.PRE_COMMIT, null, prepareQC));
 
 		QuorumCertificate newPrecommitQC = new QuorumCertificate(MsgType.PRE_COMMIT, currentView, proposal);
-		byte[] selfPrecommitSig = crypto.signVote(MsgType.PRE_COMMIT, currentView, proposal.getHash());
+		byte[] selfPrecommitSig;
+		if (thresholdCrypto != null) {
+			byte[] voteData = CryptoService.buildVoteData(MsgType.PRE_COMMIT, currentView, proposal.getHash());
+			selfPrecommitSig = thresholdCrypto.signPartial(voteData);
+		} else {
+			selfPrecommitSig = crypto.signVote(MsgType.PRE_COMMIT, currentView, proposal.getHash());
+		}
 		newPrecommitQC.addVote(replicaID, selfPrecommitSig);
 
 		while (!newPrecommitQC.hasQuorum(quorumSize)) {
@@ -454,7 +476,13 @@ public class HotStuff {
 		broadcastMessage(makeMsg(MsgType.COMMIT, null, newPrecommitQC));
 
 		QuorumCertificate newCommitQC = new QuorumCertificate(MsgType.COMMIT, currentView, proposal);
-		byte[] selfCommitSig = crypto.signVote(MsgType.COMMIT, currentView, proposal.getHash());
+		byte[] selfCommitSig;
+		if (thresholdCrypto != null) {
+			byte[] voteData = CryptoService.buildVoteData(MsgType.COMMIT, currentView, proposal.getHash());
+			selfCommitSig = thresholdCrypto.signPartial(voteData);
+		} else {
+			selfCommitSig = crypto.signVote(MsgType.COMMIT, currentView, proposal.getHash());
+		}
 		newCommitQC.addVote(replicaID, selfCommitSig);
 
 		while (!newCommitQC.hasQuorum(quorumSize)) {
@@ -504,7 +532,7 @@ public class HotStuff {
 		// A Byzantine leader could forge a QC to manipulate the safeNode predicate.
 		if (justifyQC != null
 				&& (justifyQC.getViewNumber() >= currentView
-					|| !justifyQC.verify(crypto, quorumSize))) {
+					|| !justifyQC.verify(crypto, thresholdCrypto, quorumSize))) {
 			justifyQC = null;
 		}
 
@@ -536,7 +564,7 @@ public class HotStuff {
 		QuorumCertificate rcvPrepareQC = preCommitMsg.getJustify();
 		if (rcvPrepareQC != null
 				&& rcvPrepareQC.matchingQC(MsgType.PREPARE, currentView)
-				&& rcvPrepareQC.verify(crypto, quorumSize)) {
+				&& rcvPrepareQC.verify(crypto, thresholdCrypto, quorumSize)) {
 			prepareQC = rcvPrepareQC;
 			sendMessage(leader, makeVoteMsg(MsgType.PRE_COMMIT, proposal, null));
 		}
@@ -550,7 +578,7 @@ public class HotStuff {
 		QuorumCertificate rcvPrecommitQC = commitMsg.getJustify();
 		if (rcvPrecommitQC != null
 				&& rcvPrecommitQC.matchingQC(MsgType.PRE_COMMIT, currentView)
-				&& rcvPrecommitQC.verify(crypto, quorumSize)) {
+				&& rcvPrecommitQC.verify(crypto, thresholdCrypto, quorumSize)) {
 			lockedQC = rcvPrecommitQC;
 			sendMessage(leader, makeVoteMsg(MsgType.COMMIT, proposal, null));
 		}
@@ -564,7 +592,7 @@ public class HotStuff {
 		QuorumCertificate commitQC = decideMsg.getJustify();
 		if (commitQC != null
 				&& commitQC.matchingQC(MsgType.COMMIT, currentView)
-				&& commitQC.verify(crypto, quorumSize)
+				&& commitQC.verify(crypto, thresholdCrypto, quorumSize)
 				&& commitQC.getNode() != null) {
 			executeDecision(commitQC.getNode());
 		}

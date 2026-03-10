@@ -1,297 +1,222 @@
 package tecnico.depchain.hotstuff;
 
-import java.io.IOException;
+import java.io.ByteArrayInputStream;
 import java.io.Serializable;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
-import com.weavechain.curve25519.EdwardsPoint;
-import com.weavechain.curve25519.InvalidEncodingException;
-import com.weavechain.curve25519.Scalar;
-import com.weavechain.sig.ThresholdSigEd25519;
-import com.weavechain.sig.ThresholdSigEd25519Params;
-
-import tecnico.depchain.DepchainUtils;
+import it.unisa.dia.gas.jpbc.Element;
+import it.unisa.dia.gas.jpbc.Field;
+import it.unisa.dia.gas.jpbc.Pairing;
+import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
+import it.unisa.dia.gas.plaf.jpbc.pairing.a.TypeACurveGenerator;
+import it.unisa.dia.gas.plaf.jpbc.pairing.parameters.PropertiesParameters;
 
 /**
- * Wraps the weavechain threshold-sig (Ed25519) library for HotStuff QC signatures.
- *
- * <p>Threshold (k,n) signature scheme: k = 2f+1 partial signatures from n replicas
- * can be combined into a single compact signature verifiable by anyone with the
- * shared public key.
- *
- * <p>The library uses Schnorr-based Ed25519 threshold signatures. Nonces are
- * generated freshly during each signing operation (gatherRi populates them).
- * This class supports both centralized signing (all shares in one place) and
- * distributed signing (per-replica operations).
+ * Implements BLS Threshold Signatures using the JPBC (Java Pairing-Based Cryptography) library.
+ * This is a non-interactive scheme requiring only 1 round of communication.
+ * Validations are mathematically robust and suitable for the Basic HotStuff protocol.
  */
 public class ThresholdCrypto {
-	private final ThresholdSigEd25519 scheme;
-	private final byte[] publicKey;
 	private final int replicaId;
 	private final int threshold;
 	private final int numReplicas;
 
-	// Per-replica key material (for distributed signing)
-	private final Scalar myPrivateShare;
+	private final Pairing pairing;
+	private final Element generator; // g in G1
+	private final Element globalPublicKey; // PK = g^s in G1
+	private final Element myPrivateShare; // sk_i in Zr
 
-	// Full params (for centralized signing only)
-	private ThresholdSigEd25519Params fullParams;
+	private final Map<Integer, Element> publicShares; // PK_j = g^{sk_j} in G1
 
-	/**
-	 * Per-replica constructor: each replica only knows its own private share
-	 * and the shared public key.
-	 */
-	public ThresholdCrypto(int replicaId, byte[] publicKey,
-			Scalar privateShare, int threshold, int numReplicas) {
+	public ThresholdCrypto(int replicaId, int threshold, int numReplicas,
+			String pairingParamsStr, byte[] generatorBytes, byte[] globalPublicKeyBytes,
+			byte[] myPrivateShareBytes, Map<Integer, byte[]> publicSharesBytes) {
 		this.replicaId = replicaId;
-		this.publicKey = publicKey;
-		this.myPrivateShare = privateShare;
 		this.threshold = threshold;
 		this.numReplicas = numReplicas;
-		this.scheme = new ThresholdSigEd25519(threshold, numReplicas);
-		this.fullParams = null;
-	}
 
-	/**
-	 * Full-params constructor: used for centralized signing (tests / demo).
-	 */
-	public ThresholdCrypto(int replicaId, ThresholdSigEd25519Params params,
-			int threshold, int numReplicas) {
-		this.replicaId = replicaId;
-		this.publicKey = params.getPublicKey();
-		this.myPrivateShare = params.getPrivateShares().get(replicaId);
-		this.threshold = threshold;
-		this.numReplicas = numReplicas;
-		this.scheme = new ThresholdSigEd25519(threshold, numReplicas);
-		this.fullParams = params;
-	}
-
-	/**
-	 * Whether this instance can perform centralized signing (has all key shares).
-	 */
-	public boolean canSignCentralized() { return fullParams != null; }
-
-	// ========== Setup ==========
-
-	/**
-	 * Generate fresh threshold signature parameters for all replicas.
-	 */
-	public static ThresholdSigEd25519Params generateParams(int threshold, int numReplicas)
-			throws Exception {
-		ThresholdSigEd25519 tsg = new ThresholdSigEd25519(threshold, numReplicas);
-		return tsg.generate();
-	}
-
-	// ========== Internal helpers ==========
-
-	/**
-	 * The library's verify() requires messages >= 32 bytes. We canonicalize all
-	 * messages through SHA-256 so any input length works uniformly.
-	 */
-	private static String hashMessage(String message) {
-		byte[] hash = DepchainUtils.sha256(message.getBytes());
-		StringBuilder sb = new StringBuilder(hash.length * 2);
-		for (byte b : hash) sb.append(String.format("%02x", b));
-		return sb.toString();
-	}
-
-	/**
-	 * Overload for raw byte[] messages (used by HotStuff vote data).
-	 */
-	private static String hashMessage(byte[] data) {
-		byte[] hash = DepchainUtils.sha256(data);
-		StringBuilder sb = new StringBuilder(hash.length * 2);
-		for (byte b : hash) sb.append(String.format("%02x", b));
-		return sb.toString();
-	}
-
-	// ========== Centralized signing (all shares available) ==========
-
-	/**
-	 * Sign a message using all key shares at once (centralized mode).
-	 * Nonces are generated freshly by gatherRi and stored in fullParams.
-	 * Requires this instance to have been created with full params.
-	 * Synchronized on fullParams because gatherRi is stateful.
-	 */
-	public byte[] signCentralized(String message, Set<Integer> signerIndices)
-			throws NoSuchAlgorithmException, IOException {
-		if (fullParams == null)
-			throw new IllegalStateException("Centralized signing requires full params");
-
-		synchronized (fullParams) {
-			String hashed = hashMessage(message);
-			List<EdwardsPoint> Ris = scheme.gatherRi(fullParams, hashed, signerIndices);
-			EdwardsPoint R = scheme.computeR(Ris);
-			Scalar k = scheme.computeK(publicKey, R, hashed);
-			List<Scalar> partialSigs = scheme.gatherSignatures(fullParams, k, signerIndices);
-			return scheme.computeSignature(R, partialSigs);
-		}
-	}
-
-	/**
-	 * Sign raw byte data (e.g., vote tuples) using all key shares at once.
-	 * Synchronized on fullParams because gatherRi is stateful.
-	 */
-	public byte[] signCentralized(byte[] data, Set<Integer> signerIndices)
-			throws NoSuchAlgorithmException, IOException {
-		if (fullParams == null)
-			throw new IllegalStateException("Centralized signing requires full params");
-
-		synchronized (fullParams) {
-			String hashed = hashMessage(data);
-			List<EdwardsPoint> Ris = scheme.gatherRi(fullParams, hashed, signerIndices);
-			EdwardsPoint R = scheme.computeR(Ris);
-			Scalar k = scheme.computeK(publicKey, R, hashed);
-			List<Scalar> partialSigs = scheme.gatherSignatures(fullParams, k, signerIndices);
-			return scheme.computeSignature(R, partialSigs);
-		}
-	}
-
-	// ========== Distributed signing (per-replica methods) ==========
-
-	/**
-	 * Step 1 (replica): Compute this replica's nonce commitment R_i for a message.
-	 * Returns (r_i scalar, R_i point). The replica must retain r_i for step 4.
-	 * R_i is sent to the leader.
-	 */
-	public NonceCommitment computeCommitment(String message) throws NoSuchAlgorithmException {
-		String hashed = hashMessage(message);
-		Scalar ri = scheme.computeRi(myPrivateShare, hashed);
-		EdwardsPoint Ri = ThresholdSigEd25519.mulBasepoint(ri);
-		return new NonceCommitment(ri, Ri);
-	}
-
-	/** Overload for raw byte[] vote data. */
-	public NonceCommitment computeCommitment(byte[] data) throws NoSuchAlgorithmException {
-		String hashed = hashMessage(data);
-		Scalar ri = scheme.computeRi(myPrivateShare, hashed);
-		EdwardsPoint Ri = ThresholdSigEd25519.mulBasepoint(ri);
-		return new NonceCommitment(ri, Ri);
-	}
-
-	/**
-	 * Step 2 (leader): Aggregate all R_i commitments into R.
-	 */
-	public EdwardsPoint aggregateCommitments(List<EdwardsPoint> commitments) {
-		return scheme.computeR(commitments);
-	}
-
-	/**
-	 * Step 3 (leader or any party): Compute the challenge k from the aggregated R.
-	 */
-	public Scalar computeChallenge(EdwardsPoint R, String message) throws NoSuchAlgorithmException {
-		return scheme.computeK(publicKey, R, hashMessage(message));
-	}
-
-	/** Overload for raw byte[] vote data. */
-	public Scalar computeChallenge(EdwardsPoint R, byte[] data) throws NoSuchAlgorithmException {
-		return scheme.computeK(publicKey, R, hashMessage(data));
-	}
-
-	/**
-	 * Step 4 (replica): Compute this replica's partial signature given
-	 * the challenge k and the nonce r_i retained from step 1.
-	 */
-	public Scalar computePartialSignature(Scalar ri, Scalar k, Set<Integer> signerSet) {
-		return scheme.computeSignature(replicaId + 1, myPrivateShare, ri, k, signerSet);
-	}
-
-	/**
-	 * Step 5 (leader): Combine R and all partial signatures into the final threshold signature.
-	 */
-	public byte[] combineSignatures(EdwardsPoint R, List<Scalar> partialSigs) throws IOException {
-		return scheme.computeSignature(R, partialSigs);
-	}
-
-	// ========== Verification ==========
-
-	/**
-	 * Verify a threshold signature against the shared public key.
-	 * Note: the library's verify() takes (publicKey, signatureBytes, messageBytes).
-	 */
-	public static boolean verify(byte[] publicKey, String message, byte[] signature) {
+		PropertiesParameters params = new PropertiesParameters();
 		try {
-			String hashed = hashMessage(message);
-			return ThresholdSigEd25519.verify(publicKey, signature, hashed.getBytes());
-		} catch (NoSuchAlgorithmException | InvalidEncodingException e) {
+			params.load(new ByteArrayInputStream(pairingParamsStr.getBytes()));
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to load pairing params", e);
+		}
+		this.pairing = PairingFactory.getPairing(params);
+		Field<?> g1 = pairing.getG1();
+		Field<?> zr = pairing.getZr();
+
+		this.generator = g1.newElementFromBytes(generatorBytes).getImmutable();
+		this.globalPublicKey = g1.newElementFromBytes(globalPublicKeyBytes).getImmutable();
+		this.myPrivateShare = zr.newElementFromBytes(myPrivateShareBytes).getImmutable();
+
+		this.publicShares = new HashMap<>();
+		if (publicSharesBytes != null) {
+			for (Map.Entry<Integer, byte[]> entry : publicSharesBytes.entrySet()) {
+				this.publicShares.put(entry.getKey(), g1.newElementFromBytes(entry.getValue()).getImmutable());
+			}
+		}
+	}
+
+	private Element hashToG1(byte[] data) {
+		try {
+			MessageDigest md = MessageDigest.getInstance("SHA-256");
+			byte[] hash = md.digest(data);
+			return pairing.getG1().newElementFromHash(hash, 0, hash.length).getImmutable();
+		} catch (NoSuchAlgorithmException e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	/**
+	 * Creates a BLS partial signature over the given data.
+	 * sig_i = H(m)^{sk_i}
+	 */
+	public byte[] signPartial(byte[] data) {
+		Element h = hashToG1(data);
+		Element sig = h.powZn(myPrivateShare).getImmutable();
+		return sig.toBytes();
+	}
+
+	/**
+	 * Verify an individual partial signature from a sender.
+	 * e(sig_i, g) == e(H(m), pk_i)
+	 */
+	public boolean verifyPartial(int senderId, byte[] data, byte[] signatureBytes) {
+		if (!publicShares.containsKey(senderId)) return false;
+		try {
+			Element h = hashToG1(data);
+			Element sig = pairing.getG1().newElementFromBytes(signatureBytes);
+			Element pk = publicShares.get(senderId);
+
+			Element e1 = pairing.pairing(sig, generator);
+			Element e2 = pairing.pairing(h, pk);
+			return e1.isEqual(e2);
+		} catch (Exception e) {
 			return false;
 		}
 	}
 
 	/**
-	 * Verify raw byte[] message against the shared public key.
+	 * Aggregates t valid partial signatures into a single threshold signature via Lagrange interpolation.
 	 */
-	public static boolean verify(byte[] publicKey, byte[] data, byte[] signature) {
+	public byte[] aggregateShares(Map<Integer, byte[]> partialSigs) {
+		if (partialSigs.size() < threshold) {
+			throw new IllegalArgumentException("Not enough signatures for threshold");
+		}
+
+		Field<?> zr = pairing.getZr();
+		Element aggregatedSig = pairing.getG1().newOneElement();
+
+		// Use exactly 'threshold' signatures for standard Lagrange interpolation
+		List<Integer> S = new ArrayList<>();
+		int count = 0;
+		for (Integer id : partialSigs.keySet()) {
+			S.add(id);
+			count++;
+			if (count == threshold) break;
+		}
+
+		for (int i : S) {
+			Element lambda = zr.newOneElement();
+			int xi = i + 1; // Evaluated at x = id + 1
+			for (int j : S) {
+				if (i != j) {
+					int xj = j + 1;
+					// lambda_i = product (0 - xj) / (xi - xj)
+					Element num = zr.newElement(-xj);
+					Element den = zr.newElement(xi - xj);
+					den.invert();
+					num.mul(den);
+					lambda.mul(num);
+				}
+			}
+
+			Element sig_i = pairing.getG1().newElementFromBytes(partialSigs.get(i));
+			Element term = sig_i.powZn(lambda);
+			aggregatedSig.mul(term);
+		}
+
+		return aggregatedSig.getImmutable().toBytes();
+	}
+
+	/**
+	 * Global verification of the threshold signature in O(1) pairings.
+	 * e(sig_{global}, g) == e(H(m), PK_{global})
+	 */
+	public boolean verifyThreshold(byte[] data, byte[] thresholdSignatureBytes) {
+		if (data == null || thresholdSignatureBytes == null) return false;
 		try {
-			String hashed = hashMessage(data);
-			return ThresholdSigEd25519.verify(publicKey, signature, hashed.getBytes());
-		} catch (NoSuchAlgorithmException | InvalidEncodingException e) {
+			Element h = hashToG1(data);
+			Element sig = pairing.getG1().newElementFromBytes(thresholdSignatureBytes);
+
+			Element e1 = pairing.pairing(sig, generator);
+			Element e2 = pairing.pairing(h, globalPublicKey);
+			return e1.isEqual(e2);
+		} catch (Exception e) {
 			return false;
 		}
 	}
 
-	/**
-	 * Verify using this instance's public key (String message).
-	 */
-	public boolean verify(String message, byte[] signature) {
-		return verify(publicKey, message, signature);
+	// ==============================================
+	// Trusted Dealer Setup Methods (for testing / init)
+	// ==============================================
+
+	public static class DealerParams implements Serializable {
+		public String pairingParamsStr;
+		public byte[] generator;
+		public byte[] globalPublicKey;
+		public Map<Integer, byte[]> privateShares;
+		public Map<Integer, byte[]> publicShares;
 	}
 
-	/**
-	 * Verify using this instance's public key (byte[] data).
-	 */
-	public boolean verify(byte[] data, byte[] signature) {
-		return verify(publicKey, data, signature);
-	}
+	public static DealerParams generateParams(int threshold, int numReplicas) {
+		TypeACurveGenerator cg = new TypeACurveGenerator(160, 512);
+		PropertiesParameters params = (PropertiesParameters) cg.generate();
+		Pairing pairing = PairingFactory.getPairing(params);
 
-	// ========== Data types ==========
+		Field<?> g1 = pairing.getG1();
+		Field<?> zr = pairing.getZr();
 
-	/**
-	 * Holds the ephemeral nonce scalar r_i and commitment point R_i
-	 * produced during distributed signing step 1.
-	 */
-	public static class NonceCommitment {
-		private final Scalar ri;
-		private final EdwardsPoint Ri;
+		Element generator = g1.newRandomElement().getImmutable();
 
-		public NonceCommitment(Scalar ri, EdwardsPoint Ri) {
-			this.ri = ri;
-			this.Ri = Ri;
+		Element[] coefs = new Element[threshold];
+		for (int i = 0; i < threshold; i++) {
+			coefs[i] = zr.newRandomElement().getImmutable();
 		}
 
-		public Scalar getNonceScalar() { return ri; }
-		public EdwardsPoint getCommitmentPoint() { return Ri; }
-	}
+		Element globalSecretKey = coefs[0];
+		Element globalPublicKey = generator.powZn(globalSecretKey).getImmutable();
 
-	/**
-	 * Represents a replica's key share for distribution during setup.
-	 */
-	public static class ReplicaShare implements Serializable {
-		private final Scalar privateShare;
+		Map<Integer, byte[]> privateShares = new HashMap<>();
+		Map<Integer, byte[]> publicShares = new HashMap<>();
 
-		public ReplicaShare(Scalar privateShare) {
-			this.privateShare = privateShare;
+		for (int i = 0; i < numReplicas; i++) {
+			Element x = zr.newElement(i + 1);
+			Element y = zr.newZeroElement();
+			for (int k = threshold - 1; k >= 0; k--) {
+				y.mul(x).add(coefs[k]);
+			}
+			Element sk_i = y.getImmutable();
+			Element pk_i = generator.powZn(sk_i).getImmutable();
+
+			privateShares.put(i, sk_i.toBytes());
+			publicShares.put(i, pk_i.toBytes());
 		}
 
-		public Scalar getPrivateShare() { return privateShare; }
+		DealerParams res = new DealerParams();
+		res.pairingParamsStr = params.toString();
+		res.generator = generator.toBytes();
+		res.globalPublicKey = globalPublicKey.toBytes();
+		res.privateShares = privateShares;
+		res.publicShares = publicShares;
+		return res;
 	}
-
-	/**
-	 * Extract per-replica shares from full params (done during setup / key distribution).
-	 */
-	public static List<ReplicaShare> extractShares(ThresholdSigEd25519Params params, int n) {
-		List<ReplicaShare> shares = new ArrayList<>();
-		for (int i = 0; i < n; i++) {
-			shares.add(new ReplicaShare(params.getPrivateShares().get(i)));
-		}
-		return shares;
-	}
-
-	// ========== Accessors ==========
-
-	public byte[] getPublicKey() { return publicKey; }
+	
 	public int getReplicaId() { return replicaId; }
+	public int getThreshold() { return threshold; }
 }
