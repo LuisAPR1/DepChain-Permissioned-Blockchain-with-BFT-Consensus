@@ -1,4 +1,4 @@
-package tecnico.depchain.hotstuff;
+package tecnico.depchain.depchain_server.hotstuff;
 
 import java.nio.ByteBuffer;
 import java.security.KeyPair;
@@ -10,7 +10,7 @@ import java.security.Signature;
 import java.util.ArrayList;
 import java.util.List;
 
-import tecnico.depchain.hotstuff.Message.MsgType;
+import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
 
 /**
  * Manages Ed25519 asymmetric key pairs and digital signatures for the HotStuff

@@ -1,4 +1,4 @@
-package tecnico.depchain.hotstuff;
+package tecnico.depchain.depchain_server.hotstuff;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

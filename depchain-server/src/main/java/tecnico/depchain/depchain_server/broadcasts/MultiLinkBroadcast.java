@@ -1,4 +1,4 @@
-package tecnico.depchain.broadcasts;
+package tecnico.depchain.depchain_server.broadcasts;
 
 import java.net.InetSocketAddress;
 import java.util.function.BiConsumer;

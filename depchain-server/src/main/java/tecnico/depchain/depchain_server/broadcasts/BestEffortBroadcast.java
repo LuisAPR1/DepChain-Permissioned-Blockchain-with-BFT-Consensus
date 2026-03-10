@@ -1,4 +1,4 @@
-package tecnico.depchain.broadcasts;
+package tecnico.depchain.depchain_server.broadcasts;
 
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -10,8 +10,8 @@ import java.util.function.BiConsumer;
 
 import javax.crypto.SecretKey;
 
-import tecnico.depchain.links.AuthenticatedPerfectLink;
-import tecnico.depchain.links.P2PLink;
+import tecnico.depchain.depchain_server.links.AuthenticatedPerfectLink;
+import tecnico.depchain.depchain_server.links.P2PLink;
 
 public class BestEffortBroadcast extends MultiLinkBroadcast {
 	private List<P2PLink> links;
@@ -21,7 +21,7 @@ public class BestEffortBroadcast extends MultiLinkBroadcast {
 	/**
 	 * Each link needs its own local address (unique port) since FairLossLink
 	 * binds a dedicated DatagramSocket per link.
-	 * 
+	 *
 	 * @param locals  List of local addresses, one per remote peer
 	 * @param remotes List of remote addresses
 	 */

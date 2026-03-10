@@ -1,11 +1,11 @@
-package tecnico.depchain.hotstuff;
+package tecnico.depchain.depchain_server.hotstuff;
 
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 
-import tecnico.depchain.hotstuff.Message.MsgType;
+import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
 
 /**
  * A Quorum Certificate aggregates (n-f) votes for a specific (type, view, node) tuple.

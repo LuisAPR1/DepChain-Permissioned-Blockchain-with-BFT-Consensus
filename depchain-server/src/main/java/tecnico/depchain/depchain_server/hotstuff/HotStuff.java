@@ -1,4 +1,4 @@
-package tecnico.depchain.hotstuff;
+package tecnico.depchain.depchain_server.hotstuff;
 
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -17,8 +17,8 @@ import java.util.function.Consumer;
 
 import javax.crypto.SecretKey;
 
-import tecnico.depchain.broadcasts.BestEffortBroadcast;
-import tecnico.depchain.hotstuff.Message.MsgType;
+import tecnico.depchain.depchain_server.broadcasts.BestEffortBroadcast;
+import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
 
 public class HotStuff {
 	private final int replicaID;

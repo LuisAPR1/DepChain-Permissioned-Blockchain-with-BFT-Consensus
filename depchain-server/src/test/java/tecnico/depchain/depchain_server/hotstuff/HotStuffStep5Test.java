@@ -1,4 +1,4 @@
-package tecnico.depchain.hotstuff;
+package tecnico.depchain.depchain_server.hotstuff;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -17,7 +17,7 @@ import org.junit.jupiter.api.Test;
 
 
 
-import tecnico.depchain.hotstuff.Message.MsgType;
+import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
 
 /**
  * Step 5 tests: Byzantine fault tolerance.

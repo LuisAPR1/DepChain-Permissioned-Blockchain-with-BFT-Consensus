@@ -1,4 +1,4 @@
-package tecnico.depchain.hotstuff;
+package tecnico.depchain.depchain_server.hotstuff;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -11,7 +11,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import tecnico.depchain.hotstuff.Message.MsgType;
+import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
 
 public class CryptoServiceTest {
 
@@ -31,7 +31,7 @@ public class CryptoServiceTest {
 		keyPairs = CryptoService.generateKeyPairs(N);
 		publicKeys = CryptoService.extractPublicKeys(keyPairs);
 		cryptoServices = new CryptoService[N];
-		
+
 		dealerParams = ThresholdCrypto.generateParams(THRESHOLD, N);
 		thresholdCryptos = new ThresholdCrypto[N];
 
@@ -55,7 +55,7 @@ public class CryptoServiceTest {
 	void testBLSPartialSignature() {
 		byte[] data = "BLS Test".getBytes();
 		byte[] partialSig = thresholdCryptos[2].signPartial(data);
-		
+
 		assertTrue(thresholdCryptos[0].verifyPartial(2, data, partialSig));
 		assertFalse(thresholdCryptos[0].verifyPartial(1, data, partialSig));
 	}
@@ -63,7 +63,7 @@ public class CryptoServiceTest {
 	@Test
 	void testBLSAggregationAndThresholdVerification() {
 		byte[] data = "Aggregate Test".getBytes();
-		
+
 		Map<Integer, byte[]> partialSigs = new HashMap<>();
 		for (int i = 0; i < THRESHOLD; i++) {
 			partialSigs.put(i, thresholdCryptos[i].signPartial(data));
@@ -78,7 +78,7 @@ public class CryptoServiceTest {
 	@Test
 	void testBLSRejectsNotEnoughSignatures() {
 		byte[] data = "Aggregate Test".getBytes();
-		
+
 		Map<Integer, byte[]> partialSigs = new HashMap<>();
 		for (int i = 0; i < THRESHOLD - 1; i++) {
 			partialSigs.put(i, thresholdCryptos[i].signPartial(data));
@@ -92,14 +92,14 @@ public class CryptoServiceTest {
 	@Test
 	void testBLSAggregationWithDifferentSubset() {
 		byte[] data = "Aggregate Test 2".getBytes();
-		
+
 		Map<Integer, byte[]> partialSigs = new HashMap<>();
 		partialSigs.put(1, thresholdCryptos[1].signPartial(data));
 		partialSigs.put(2, thresholdCryptos[2].signPartial(data));
 		partialSigs.put(3, thresholdCryptos[3].signPartial(data));
 
 		byte[] thresholdSig = thresholdCryptos[0].aggregateShares(partialSigs);
-		
+
 		assertTrue(thresholdCryptos[0].verifyThreshold(data, thresholdSig));
 	}
 

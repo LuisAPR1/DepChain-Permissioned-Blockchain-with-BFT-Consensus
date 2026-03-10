@@ -1,4 +1,4 @@
-package tecnico.depchain.broadcasts;
+package tecnico.depchain.depchain_server.broadcasts;
 
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -11,7 +11,7 @@ import java.util.function.BiConsumer;
 
 import javax.crypto.SecretKey;
 
-import tecnico.depchain.DepchainUtils;
+import tecnico.depchain.depchain_server.DepchainUtils;
 
 public class EagerReliableBroadcast extends MultiLinkBroadcast {
 	private BestEffortBroadcast lower;

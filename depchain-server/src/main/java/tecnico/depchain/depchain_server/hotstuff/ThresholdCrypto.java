@@ -1,4 +1,4 @@
-package tecnico.depchain.hotstuff;
+package tecnico.depchain.depchain_server.hotstuff;
 
 import java.io.ByteArrayInputStream;
 import java.io.Serializable;
@@ -23,13 +23,13 @@ import it.unisa.dia.gas.plaf.jpbc.pairing.parameters.PropertiesParameters;
  */
 public class ThresholdCrypto {
 	private final int replicaId;
-	private final int threshold;
-	private final int numReplicas;
 
 	private final Pairing pairing;
 	private final Element generator; // g in G1
 	private final Element globalPublicKey; // PK = g^s in G1
 	private final Element myPrivateShare; // sk_i in Zr
+	private final int threshold;
+	private final int numReplicas;
 
 	private final Map<Integer, Element> publicShares; // PK_j = g^{sk_j} in G1
 
@@ -216,7 +216,7 @@ public class ThresholdCrypto {
 		res.publicShares = publicShares;
 		return res;
 	}
-	
+
 	public int getReplicaId() { return replicaId; }
 	public int getThreshold() { return threshold; }
 }

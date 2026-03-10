@@ -1,10 +1,10 @@
-package tecnico.depchain.hotstuff;
+package tecnico.depchain.depchain_server.hotstuff;
 
 import java.io.Serializable;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
-import tecnico.depchain.DepchainUtils;
+import tecnico.depchain.depchain_server.DepchainUtils;
 
 public class TreeNode implements Serializable {
 	private byte[] parentHash;

@@ -1,4 +1,4 @@
-package tecnico.depchain.links;
+package tecnico.depchain.depchain_server.links;
 
 import java.net.InetSocketAddress;
 import java.net.SocketException;
@@ -7,7 +7,7 @@ import java.util.NavigableMap;
 import java.util.TreeMap;
 import java.util.function.BiConsumer;
 
-import tecnico.depchain.DepchainUtils;
+import tecnico.depchain.depchain_server.DepchainUtils;
 
 // Stubborn link implementation
 // Repeatedly send messages until ACKed
