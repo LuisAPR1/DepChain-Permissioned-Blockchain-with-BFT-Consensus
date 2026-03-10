@@ -32,11 +32,12 @@ public class TreeNode implements Serializable {
 
 	private void calculateHash()
 	{
-		byte[] cmdBytes = command.getBytes();
+		byte[] cmdBytes = command.getBytes(java.nio.charset.StandardCharsets.UTF_8);
 		ByteBuffer buf = ByteBuffer.allocate(parentHash.length + cmdBytes.length);
 		buf.put(parentHash);
 		buf.put(cmdBytes);
 		ownHash = DepchainUtils.sha256(buf.array());
+		System.err.println("TreeNode Hash Calc: parentHash=" + Arrays.toString(parentHash) + " cmd=" + command + " ownHash=" + Arrays.toString(ownHash));
 	}
 
 	/**

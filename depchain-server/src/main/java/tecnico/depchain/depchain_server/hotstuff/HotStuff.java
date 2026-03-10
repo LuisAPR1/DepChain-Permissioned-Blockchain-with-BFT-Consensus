@@ -186,9 +186,11 @@ public class HotStuff {
 			// Step 5: Verify the global message signature
 			if (msg.getMessageSignature() != null) {
 				if (!crypto.verify(msg.getSenderId(), msg.getSignableBytes(), msg.getMessageSignature())) {
+					System.err.println("[HotStuff-" + replicaID + "] ERROR: Global signature failed for msg from " + msg.getSenderId() + " type=" + msg.getType());
 					return; // Invalid signature, drop silently
 				}
 			} else {
+				System.err.println("[HotStuff-" + replicaID + "] ERROR: Message unsigned from " + msg.getSenderId() + " type=" + msg.getType());
 				return; // Unsigned message, drop silently
 			}
 			messageQueue.offer(msg);
@@ -290,15 +292,29 @@ public class HotStuff {
 	 */
 	private boolean verifyVoteMsg(Message msg, byte[] expectedNodeHash) {
 		int senderId = msg.getSenderId();
-		if (senderId < 0 || senderId >= numReplicas) return false;
-		if (senderId == replicaID) return false;
+		if (senderId < 0 || senderId >= numReplicas) {
+			System.err.println("[HotStuff-" + replicaID + "] verifyVoteMsg failed: invalid senderId " + senderId);
+			return false;
+		}
+		if (senderId == replicaID) {
+			System.err.println("[HotStuff-" + replicaID + "] verifyVoteMsg failed: senderId == replicaID (" + senderId + ")");
+			return false;
+		}
 		if (thresholdCrypto != null) {
 			byte[] voteData = CryptoService.buildVoteData(msg.getType(), msg.getViewNumber(), expectedNodeHash);
-			return thresholdCrypto.verifyPartial(senderId, voteData, msg.getPartialSignature());
+			boolean res = thresholdCrypto.verifyPartial(senderId, voteData, msg.getPartialSignature());
+			if (!res) {
+				System.err.println("[HotStuff-" + replicaID + "] verifyVoteMsg failed: threshold crypto verification failed for sender " + senderId + " type=" + msg.getType() + " expectedHash=" + java.util.Arrays.toString(expectedNodeHash));
+			}
+			return res;
 		}
-		return crypto.verifyVote(
+		boolean res = crypto.verifyVote(
 				senderId, msg.getType(), msg.getViewNumber(),
 				expectedNodeHash, msg.getPartialSignature());
+		if (!res) {
+			System.err.println("[HotStuff-" + replicaID + "] verifyVoteMsg failed: crypto verification failed for sender " + senderId + " type=" + msg.getType());
+		}
+		return res;
 	}
 
 	/**

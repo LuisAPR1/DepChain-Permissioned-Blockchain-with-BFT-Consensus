@@ -66,7 +66,9 @@ public class ThresholdCrypto {
 		try {
 			MessageDigest md = MessageDigest.getInstance("SHA-256");
 			byte[] hash = md.digest(data);
-			return pairing.getG1().newElementFromHash(hash, 0, hash.length).getImmutable();
+			synchronized (pairing) {
+				return pairing.getG1().newElementFromHash(hash, 0, hash.length).getImmutable();
+			}
 		} catch (NoSuchAlgorithmException e) {
 			throw new RuntimeException(e);
 		}
@@ -77,9 +79,11 @@ public class ThresholdCrypto {
 	 * sig_i = H(m)^{sk_i}
 	 */
 	public byte[] signPartial(byte[] data) {
-		Element h = hashToG1(data);
-		Element sig = h.powZn(myPrivateShare).getImmutable();
-		return sig.toBytes();
+		synchronized (pairing) {
+			Element h = hashToG1(data);
+			Element sig = h.powZn(myPrivateShare).getImmutable();
+			return sig.toBytes();
+		}
 	}
 
 	/**
@@ -87,16 +91,21 @@ public class ThresholdCrypto {
 	 * e(sig_i, g) == e(H(m), pk_i)
 	 */
 	public boolean verifyPartial(int senderId, byte[] data, byte[] signatureBytes) {
+		if (data == null || signatureBytes == null) return false;
 		if (!publicShares.containsKey(senderId)) return false;
 		try {
-			Element h = hashToG1(data);
-			Element sig = pairing.getG1().newElementFromBytes(signatureBytes);
-			Element pk = publicShares.get(senderId);
+			synchronized (pairing) {
+				Element h = hashToG1(data);
+				Element sig = pairing.getG1().newElementFromBytes(signatureBytes);
+				Element pk = publicShares.get(senderId);
 
-			Element e1 = pairing.pairing(sig, generator);
-			Element e2 = pairing.pairing(h, pk);
-			return e1.isEqual(e2);
+				Element e1 = pairing.pairing(sig, generator);
+				Element e2 = pairing.pairing(h, pk);
+				return e1.isEqual(e2);
+			}
 		} catch (Exception e) {
+			System.err.println("ThresholdCrypto verifyPartial EXCEPTION!: " + e.getMessage());
+			e.printStackTrace();
 			return false;
 		}
 	}
@@ -109,39 +118,41 @@ public class ThresholdCrypto {
 			throw new IllegalArgumentException("Not enough signatures for threshold");
 		}
 
-		Field<?> zr = pairing.getZr();
-		Element aggregatedSig = pairing.getG1().newOneElement();
+		synchronized (pairing) {
+			Field<?> zr = pairing.getZr();
+			Element aggregatedSig = pairing.getG1().newOneElement();
 
-		// Use exactly 'threshold' signatures for standard Lagrange interpolation
-		List<Integer> S = new ArrayList<>();
-		int count = 0;
-		for (Integer id : partialSigs.keySet()) {
-			S.add(id);
-			count++;
-			if (count == threshold) break;
-		}
-
-		for (int i : S) {
-			Element lambda = zr.newOneElement();
-			int xi = i + 1; // Evaluated at x = id + 1
-			for (int j : S) {
-				if (i != j) {
-					int xj = j + 1;
-					// lambda_i = product (0 - xj) / (xi - xj)
-					Element num = zr.newElement(-xj);
-					Element den = zr.newElement(xi - xj);
-					den.invert();
-					num.mul(den);
-					lambda.mul(num);
-				}
+			// Use exactly 'threshold' signatures for standard Lagrange interpolation
+			List<Integer> S = new ArrayList<>();
+			int count = 0;
+			for (Integer id : partialSigs.keySet()) {
+				S.add(id);
+				count++;
+				if (count == threshold) break;
 			}
 
-			Element sig_i = pairing.getG1().newElementFromBytes(partialSigs.get(i));
-			Element term = sig_i.powZn(lambda);
-			aggregatedSig.mul(term);
-		}
+			for (int i : S) {
+				Element lambda = zr.newOneElement();
+				int xi = i + 1; // Evaluated at x = id + 1
+				for (int j : S) {
+					if (i != j) {
+						int xj = j + 1;
+						// lambda_i = product (0 - xj) / (xi - xj)
+						Element num = zr.newElement(-xj);
+						Element den = zr.newElement(xi - xj);
+						den.invert();
+						num.mul(den);
+						lambda.mul(num);
+					}
+				}
 
-		return aggregatedSig.getImmutable().toBytes();
+				Element sig_i = pairing.getG1().newElementFromBytes(partialSigs.get(i));
+				Element term = sig_i.powZn(lambda);
+				aggregatedSig.mul(term);
+			}
+
+			return aggregatedSig.getImmutable().toBytes();
+		}
 	}
 
 	/**
@@ -151,12 +162,14 @@ public class ThresholdCrypto {
 	public boolean verifyThreshold(byte[] data, byte[] thresholdSignatureBytes) {
 		if (data == null || thresholdSignatureBytes == null) return false;
 		try {
-			Element h = hashToG1(data);
-			Element sig = pairing.getG1().newElementFromBytes(thresholdSignatureBytes);
+			synchronized (pairing) {
+				Element h = hashToG1(data);
+				Element sig = pairing.getG1().newElementFromBytes(thresholdSignatureBytes);
 
-			Element e1 = pairing.pairing(sig, generator);
-			Element e2 = pairing.pairing(h, globalPublicKey);
-			return e1.isEqual(e2);
+				Element e1 = pairing.pairing(sig, generator);
+				Element e2 = pairing.pairing(h, globalPublicKey);
+				return e1.isEqual(e2);
+			}
 		} catch (Exception e) {
 			return false;
 		}

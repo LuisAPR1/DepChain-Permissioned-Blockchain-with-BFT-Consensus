@@ -785,7 +785,7 @@ public class HotStuffStep5Test {
 
 			// Leader 1 will equivocate: send one Proposal to replica 0, and another to replica 2/3
 			replicas[byzantineLeaderId].setOutgoingFilter((dest, msg) -> {
-				if (msg.getType() == MsgType.PREPARE && msg.getTreeNode() != null) {
+				if (msg.getType() == MsgType.PREPARE && msg.getTreeNode() != null && msg.getPartialSignature() == null) {
 					String cmd = msg.getTreeNode().getCommand();
 					if (dest == 0) {
 						TreeNode evilNode = new TreeNode(msg.getTreeNode().getParentHash(), cmd + "-A");
