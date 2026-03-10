@@ -12,12 +12,15 @@ import javax.crypto.SecretKey;
 import tecnico.depchain.depchain_common.DepchainClient;
 import tecnico.depchain.depchain_common.Membership;
 import tecnico.depchain.depchain_common.links.AuthenticatedPerfectLink;
+import tecnico.depchain.depchain_common.messages.ConfirmMessage;
 import tecnico.depchain.depchain_common.messages.StringMessage;
 import tecnico.depchain.depchain_server.hotstuff.DepChainService;
 
 public class Depchain {
 	private static DepChainService service;
 	private static Map<InetSocketAddress, AuthenticatedPerfectLink> links = new HashMap<>();
+	private static Map<String, InetSocketAddress> requestSenderMap = new HashMap<>();
+	private static Map<String, Long> requestIdMap = new HashMap<>();
 
 	public static void main(String[] args)
 		throws SocketException, NoSuchAlgorithmException, InvalidKeyException, IllegalArgumentException {
@@ -46,16 +49,28 @@ public class Depchain {
 	}
 
 	//Client msg handler
-	private static void rxHandler(byte[] data, InetSocketAddress address) {
+	private static void rxHandler(byte[] data, InetSocketAddress sender) {
 		//HACK: Assumes clients only send StringMesssage
 
 		StringMessage msg = StringMessage.deserialize(data);
+
+		//Map response to client
+		synchronized (requestSenderMap)
+		{
+			requestSenderMap.put(msg.getContent(), sender);
+			requestIdMap.put(msg.getContent(), msg.getSeqNum());
+		}
 		service.handleClientRequest(msg.getContent());
 
-		//TODO: Map this content to reply to client
+		//TODO: How to handle case where command is not decided?
 	}
 
 	private static void onDecide(String command) {
-		//TODO: Reply to mapped client
+		long id = requestIdMap.get(command);
+		InetSocketAddress requester = requestSenderMap.get(command);
+		AuthenticatedPerfectLink link = links.get(requester);
+
+		ConfirmMessage msg = new ConfirmMessage(id, true);
+		link.transmit(msg.serialize());
 	}
 }
