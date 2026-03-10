@@ -10,6 +10,7 @@
 
     <modules>
         <module>depchain-server</module>
+        <module>depchain-client</module>
     </modules>
 
     <dependencyManagement>
