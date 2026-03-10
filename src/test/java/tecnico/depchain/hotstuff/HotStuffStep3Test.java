@@ -2,6 +2,8 @@ package tecnico.depchain.hotstuff;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import java.security.KeyPair;
+import java.security.PublicKey;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -31,9 +33,13 @@ public class HotStuffStep3Test {
 			keys.add(generateKey());
 		}
 
+		List<KeyPair> keyPairs = CryptoService.generateKeyPairs(n);
+		List<PublicKey> publicKeys = CryptoService.extractPublicKeys(keyPairs);
+
 		HotStuff[] replicas = new HotStuff[n];
 		for (int i = 0; i < n; i++) {
-			replicas[i] = new HotStuff(i, HOST, basePort, n, new ArrayList<>(keys));
+			CryptoService crypto = new CryptoService(i, keyPairs.get(i), publicKeys);
+			replicas[i] = new HotStuff(i, HOST, basePort, n, new ArrayList<>(keys), crypto);
 		}
 		return replicas;
 	}

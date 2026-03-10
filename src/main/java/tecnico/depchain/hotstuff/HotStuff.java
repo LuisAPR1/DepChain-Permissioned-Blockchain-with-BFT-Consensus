@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 import javax.crypto.SecretKey;
@@ -24,11 +25,14 @@ public class HotStuff {
 	private final int numReplicas;
 	private final int quorumSize; // n - f
 	private final BestEffortBroadcast broadcast;
+	private final CryptoService crypto;
+	private final ThresholdCrypto thresholdCrypto;
 
 	// Protocol state (Algorithm 2)
 	private volatile int currentView = 1;
 	private QuorumCertificate prepareQC = null;
 	private QuorumCertificate lockedQC = null;
+	private TreeNode votedNodeThisView = null;
 
 	// Tree of proposals
 	private final Map<String, TreeNode> nodeStore = new HashMap<>();
@@ -46,6 +50,11 @@ public class HotStuff {
 	// Callback for decided commands
 	private Consumer<String> onDecide = null;
 
+	// Outgoing message filter for Byzantine testing (Step 5).
+	// Applied before every send/broadcast. Return null to drop the message.
+	// Takes (destinationId, originalMessage) and returns modifiedMessage.
+	private volatile BiFunction<Integer, Message, Message> outgoingFilter = null;
+
 	// Protocol thread
 	private Thread protocolThread;
 	private volatile boolean running = false;
@@ -58,17 +67,22 @@ public class HotStuff {
 	private long viewDeadline;
 
 	/**
-	 * @param replicaID   This replica's ID (0-indexed)
-	 * @param basePort    Base port for the system
-	 * @param host        Host address for all replicas
-	 * @param numReplicas Total number of replicas
-	 * @param keys        List of n shared keys (index i = shared key with replica i)
+	 * @param replicaID       This replica's ID (0-indexed)
+	 * @param host            Host address for all replicas
+	 * @param basePort        Base port for the system
+	 * @param numReplicas     Total number of replicas
+	 * @param keys            List of n shared HMAC keys (index i = shared key with replica i)
+	 * @param crypto          CryptoService for Ed25519 signing/verification (Step 5)
+	 * @param thresholdCrypto ThresholdCrypto for threshold QC signatures (nullable)
 	 */
 	public HotStuff(
-			int replicaID, String host, int basePort, int numReplicas, List<SecretKey> keys)
+			int replicaID, String host, int basePort, int numReplicas,
+			List<SecretKey> keys, CryptoService crypto, ThresholdCrypto thresholdCrypto)
 			throws SocketException, NoSuchAlgorithmException, InvalidKeyException, IllegalArgumentException {
 		this.replicaID = replicaID;
 		this.numReplicas = numReplicas;
+		this.crypto = crypto;
+		this.thresholdCrypto = thresholdCrypto;
 		int f = (numReplicas - 1) / 3;
 		this.quorumSize = numReplicas - f;
 
@@ -91,6 +105,14 @@ public class HotStuff {
 
 		SecretKey ownKey = keys.get(replicaID);
 		broadcast = new BestEffortBroadcast(this::handleMsg, this::handleMsg, locals, ownKey, remotes, peerKeys);
+	}
+
+	/** Backward-compatible constructor (no threshold crypto). */
+	public HotStuff(
+			int replicaID, String host, int basePort, int numReplicas,
+			List<SecretKey> keys, CryptoService crypto)
+			throws SocketException, NoSuchAlgorithmException, InvalidKeyException, IllegalArgumentException {
+		this(replicaID, host, basePort, numReplicas, keys, crypto, null);
 	}
 
 	// --- Public interface ---
@@ -132,6 +154,15 @@ public class HotStuff {
 		this.viewTimeoutMs = timeoutMs;
 	}
 
+	/**
+	 * Install a filter applied to every outgoing message before it is sent.
+	 * The filter may modify the message or return null to suppress it entirely.
+	 * Intended for Byzantine fault injection during testing.
+	 */
+	public void setOutgoingFilter(BiFunction<Integer, Message, Message> filter) {
+		this.outgoingFilter = filter;
+	}
+
 	// --- Network layer ---
 
 	private void handleMsg(byte[] data, InetSocketAddress remote) {
@@ -140,11 +171,27 @@ public class HotStuff {
 
 		Message msg = Message.deserialize(msgBytes);
 		if (msg != null) {
+			// Step 5: Verify the global message signature
+			if (msg.getMessageSignature() != null) {
+				if (!crypto.verify(msg.getSenderId(), msg.getSignableBytes(), msg.getMessageSignature())) {
+					return; // Invalid signature, drop silently
+				}
+			} else {
+				return; // Unsigned message, drop silently
+			}
 			messageQueue.offer(msg);
 		}
 	}
 
 	private void sendMessage(int replica, Message msg) {
+		BiFunction<Integer, Message, Message> filter = this.outgoingFilter;
+		if (filter != null) {
+			msg = filter.apply(replica, msg);
+			if (msg == null) return;
+		}
+		if (msg.getMessageSignature() == null) {
+			msg.setMessageSignature(crypto.sign(msg.getSignableBytes()));
+		}
 		if (replica == replicaID) {
 			messageQueue.offer(msg);
 			return;
@@ -154,7 +201,9 @@ public class HotStuff {
 	}
 
 	private void broadcastMessage(Message msg) {
-		broadcast.broadcast(msg.serialize());
+		for (int i = 0; i < numReplicas; i++) {
+			sendMessage(i, msg);
+		}
 	}
 
 	// --- Timeout helpers ---
@@ -210,6 +259,26 @@ public class HotStuff {
 		return new Message(type, currentView, replicaID, node, qc);
 	}
 
+	private Message makeVoteMsg(MsgType type, TreeNode node, QuorumCertificate qc) {
+		byte[] nodeHash = (node != null) ? node.getHash() : null;
+		byte[] sig = crypto.signVote(type, currentView, nodeHash);
+		return new Message(type, currentView, replicaID, node, qc, sig);
+	}
+
+	/**
+	 * Verify a vote message's Ed25519 signature against the expected node hash.
+	 * Also performs sender ID bounds check and rejects votes that claim to
+	 * be from the leader itself (self-votes are added explicitly, not from network).
+	 */
+	private boolean verifyVoteMsg(Message msg, byte[] expectedNodeHash) {
+		int senderId = msg.getSenderId();
+		if (senderId < 0 || senderId >= numReplicas) return false;
+		if (senderId == replicaID) return false;
+		return crypto.verifyVote(
+				senderId, msg.getType(), msg.getViewNumber(),
+				expectedNodeHash, msg.getPartialSignature());
+	}
+
 	/**
 	 * safeNode predicate (Algorithm 1, lines 25-27).
 	 */
@@ -249,6 +318,21 @@ public class HotStuff {
 		return sb.toString();
 	}
 
+	/**
+	 * After the leader collects n-f individually verified Ed25519 votes and forms
+	 * a QC, create a compact threshold signature via tcombine (paper Section 3).
+	 * Uses centralized signing when full threshold params are available.
+	 */
+	private void addThresholdSignature(QuorumCertificate qc, byte[] nodeHash) {
+		if (thresholdCrypto == null || !thresholdCrypto.canSignCentralized()) return;
+		try {
+			byte[] voteData = CryptoService.buildVoteData(qc.getType(), qc.getViewNumber(), nodeHash);
+			byte[] sig = thresholdCrypto.signCentralized(voteData, qc.getVoterIds());
+			qc.setThresholdSignature(sig);
+		} catch (Exception ignored) {
+		}
+	}
+
 	// --- Protocol main loop (with timeout / nextView interrupt) ---
 
 	private void protocolLoop() {
@@ -274,6 +358,7 @@ public class HotStuff {
 						viewTimeoutMs = Math.min(viewTimeoutMs * 2, MAX_TIMEOUT_MS);
 					}
 					currentView++;
+					votedNodeThisView = null;
 				}
 			}
 		}
@@ -305,8 +390,13 @@ public class HotStuff {
 			}
 
 			for (Message m : newViews.values()) {
+				if (m.getSenderId() < 0 || m.getSenderId() >= numReplicas) continue;
 				QuorumCertificate qc = m.getJustify();
-				if (qc != null) {
+				if (qc != null
+						&& qc.getType() == MsgType.PREPARE
+						&& qc.getViewNumber() > 0
+						&& qc.getViewNumber() < currentView
+						&& qc.verify(crypto, quorumSize)) {
 					if (highQC == null || qc.getViewNumber() > highQC.getViewNumber())
 						highQC = qc;
 				}
@@ -328,42 +418,55 @@ public class HotStuff {
 
 		// === Collect PREPARE votes -> form prepareQC ===
 		QuorumCertificate newPrepareQC = new QuorumCertificate(MsgType.PREPARE, currentView, proposal);
-		if (selfVote)
-			newPrepareQC.addVoter(replicaID);
+		if (selfVote) {
+			byte[] selfSig = crypto.signVote(MsgType.PREPARE, currentView, proposal.getHash());
+			newPrepareQC.addVote(replicaID, selfSig);
+		}
 
 		while (!newPrepareQC.hasQuorum(quorumSize)) {
 			Message msg = pullMessage(MsgType.PREPARE, currentView);
 			if (msg == null) return false;
-			newPrepareQC.addVoter(msg.getSenderId());
+			if (verifyVoteMsg(msg, proposal.getHash())) {
+				newPrepareQC.addVote(msg.getSenderId(), msg.getPartialSignature());
+			}
 		}
 
 		// === PRE-COMMIT phase ===
+		addThresholdSignature(newPrepareQC, proposal.getHash());
 		prepareQC = newPrepareQC;
 		broadcastMessage(makeMsg(MsgType.PRE_COMMIT, null, prepareQC));
 
 		QuorumCertificate newPrecommitQC = new QuorumCertificate(MsgType.PRE_COMMIT, currentView, proposal);
-		newPrecommitQC.addVoter(replicaID);
+		byte[] selfPrecommitSig = crypto.signVote(MsgType.PRE_COMMIT, currentView, proposal.getHash());
+		newPrecommitQC.addVote(replicaID, selfPrecommitSig);
 
 		while (!newPrecommitQC.hasQuorum(quorumSize)) {
 			Message msg = pullMessage(MsgType.PRE_COMMIT, currentView);
 			if (msg == null) return false;
-			newPrecommitQC.addVoter(msg.getSenderId());
+			if (verifyVoteMsg(msg, proposal.getHash())) {
+				newPrecommitQC.addVote(msg.getSenderId(), msg.getPartialSignature());
+			}
 		}
 
 		// === COMMIT phase ===
+		addThresholdSignature(newPrecommitQC, proposal.getHash());
 		lockedQC = newPrecommitQC;
 		broadcastMessage(makeMsg(MsgType.COMMIT, null, newPrecommitQC));
 
 		QuorumCertificate newCommitQC = new QuorumCertificate(MsgType.COMMIT, currentView, proposal);
-		newCommitQC.addVoter(replicaID);
+		byte[] selfCommitSig = crypto.signVote(MsgType.COMMIT, currentView, proposal.getHash());
+		newCommitQC.addVote(replicaID, selfCommitSig);
 
 		while (!newCommitQC.hasQuorum(quorumSize)) {
 			Message msg = pullMessage(MsgType.COMMIT, currentView);
 			if (msg == null) return false;
-			newCommitQC.addVoter(msg.getSenderId());
+			if (verifyVoteMsg(msg, proposal.getHash())) {
+				newCommitQC.addVote(msg.getSenderId(), msg.getPartialSignature());
+			}
 		}
 
 		// === DECIDE phase ===
+		addThresholdSignature(newCommitQC, proposal.getHash());
 		broadcastMessage(makeMsg(MsgType.DECIDE, null, newCommitQC));
 		executeDecision(proposal);
 		return true;
@@ -377,7 +480,18 @@ public class HotStuff {
 		Message prepareMsg = pullMessage(MsgType.PREPARE, currentView);
 		if (prepareMsg == null) return false;
 
+		// Byzantine check: PREPARE must come from the current leader
+		if (prepareMsg.getSenderId() != leader) return false;
+
 		TreeNode proposal = prepareMsg.getTreeNode();
+
+		// Equivocation protection: explicitly fail if already voted for a different proposal in this view
+		if (proposal != null) {
+			if (votedNodeThisView != null && !Arrays.equals(votedNodeThisView.getHash(), proposal.getHash())) {
+				return false; // Leader equivocated!
+			}
+			votedNodeThisView = proposal;
+		}
 
 		if (proposal != null) {
 			storeNode(proposal);
@@ -385,6 +499,14 @@ public class HotStuff {
 		}
 
 		QuorumCertificate justifyQC = prepareMsg.getJustify();
+
+		// Byzantine check: verify justifyQC before trusting it.
+		// A Byzantine leader could forge a QC to manipulate the safeNode predicate.
+		if (justifyQC != null
+				&& (justifyQC.getViewNumber() >= currentView
+					|| !justifyQC.verify(crypto, quorumSize))) {
+			justifyQC = null;
+		}
 
 		if (justifyQC != null && justifyQC.getNode() != null) {
 			storeNode(justifyQC.getNode());
@@ -396,39 +518,55 @@ public class HotStuff {
 			}
 		}
 
-		if (proposal != null && safeNode(proposal, justifyQC)) {
-			sendMessage(leader, makeMsg(MsgType.PREPARE, proposal, null));
+		// Algorithm 2, line 9: proposal must extend from justify.node AND pass safeNode
+		boolean extendsFromJustify = (justifyQC == null || justifyQC.getNode() == null)
+				|| proposal.extendsFrom(justifyQC.getNode());
+
+		if (proposal != null && extendsFromJustify && safeNode(proposal, justifyQC)) {
+			sendMessage(leader, makeVoteMsg(MsgType.PREPARE, proposal, null));
 		}
 
 		// === PRE-COMMIT phase (replica) ===
 		Message preCommitMsg = pullMessage(MsgType.PRE_COMMIT, currentView);
 		if (preCommitMsg == null) return false;
 
+		// Byzantine check: PRE-COMMIT must come from leader and carry a valid prepareQC
+		if (preCommitMsg.getSenderId() != leader) return false;
+
 		QuorumCertificate rcvPrepareQC = preCommitMsg.getJustify();
-		if (rcvPrepareQC != null) {
+		if (rcvPrepareQC != null
+				&& rcvPrepareQC.matchingQC(MsgType.PREPARE, currentView)
+				&& rcvPrepareQC.verify(crypto, quorumSize)) {
 			prepareQC = rcvPrepareQC;
+			sendMessage(leader, makeVoteMsg(MsgType.PRE_COMMIT, proposal, null));
 		}
-		sendMessage(leader, makeMsg(MsgType.PRE_COMMIT, proposal, null));
 
 		// === COMMIT phase (replica) ===
 		Message commitMsg = pullMessage(MsgType.COMMIT, currentView);
 		if (commitMsg == null) return false;
 
+		if (commitMsg.getSenderId() != leader) return false;
+
 		QuorumCertificate rcvPrecommitQC = commitMsg.getJustify();
-		if (rcvPrecommitQC != null) {
+		if (rcvPrecommitQC != null
+				&& rcvPrecommitQC.matchingQC(MsgType.PRE_COMMIT, currentView)
+				&& rcvPrecommitQC.verify(crypto, quorumSize)) {
 			lockedQC = rcvPrecommitQC;
+			sendMessage(leader, makeVoteMsg(MsgType.COMMIT, proposal, null));
 		}
-		sendMessage(leader, makeMsg(MsgType.COMMIT, proposal, null));
 
 		// === DECIDE phase (replica) ===
 		Message decideMsg = pullMessage(MsgType.DECIDE, currentView);
 		if (decideMsg == null) return false;
 
+		if (decideMsg.getSenderId() != leader) return false;
+
 		QuorumCertificate commitQC = decideMsg.getJustify();
-		if (commitQC != null && commitQC.getNode() != null) {
+		if (commitQC != null
+				&& commitQC.matchingQC(MsgType.COMMIT, currentView)
+				&& commitQC.verify(crypto, quorumSize)
+				&& commitQC.getNode() != null) {
 			executeDecision(commitQC.getNode());
-		} else if (proposal != null) {
-			executeDecision(proposal);
 		}
 		return true;
 	}
