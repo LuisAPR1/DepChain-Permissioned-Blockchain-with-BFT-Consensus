@@ -1,0 +1,6 @@
+Key exchange for ALP
+Leader wait for new view (ignores QC)
+Lib rx should wait for 2f
+Cli digital signature
+2 replica crash
+partial signature invalida da replica
