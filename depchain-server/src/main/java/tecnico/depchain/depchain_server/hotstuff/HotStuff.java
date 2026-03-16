@@ -199,9 +199,22 @@ public class HotStuff {
 	}
 
 	private void broadcastMessage(Message msg) {
-		for (int i = 0; i < numReplicas; i++) {
-			sendMessage(i, msg);
+		BiFunction<Integer, Message, Message> filter = this.outgoingFilter;
+		if (filter != null) {
+			// Apply filter globally for the broadcast (using a dummy dest = -1)
+			msg = filter.apply(-1, msg);
+			if (msg == null) return;
 		}
+		
+		if (msg.getMessageSignature() == null) {
+			msg.setMessageSignature(crypto.sign(msg.getSignableBytes()));
+		}
+		
+		// Self-delivery
+		messageQueue.offer(msg);
+		
+		// Broadcast to others using the native layer
+		broadcast.broadcast(msg.serialize());
 	}
 
 
