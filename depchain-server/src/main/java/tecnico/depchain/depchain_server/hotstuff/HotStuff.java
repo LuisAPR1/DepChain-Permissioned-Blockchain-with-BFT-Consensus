@@ -360,6 +360,9 @@ public class HotStuff {
 
 
 	private void protocolLoop() {
+		// Bootstrap: every replica sends NEW_VIEW(viewNumber=0, qc=null) to View 1's leader
+		sendInitialNewView();
+
 		while (running) {
 			startViewTimer();
 			boolean viewSucceeded = false;
@@ -405,31 +408,41 @@ public class HotStuff {
 		sendMessage(nextLeader, makeMsg(MsgType.NEW_VIEW, null, prepareQC));
 	}
 
+	/**
+	 * Bootstrap for View 1: send a NEW_VIEW with viewNumber=0 and null QC
+	 * to the leader of View 1, so View 1 follows the same message flow as
+	 * every other view.
+	 */
+	private void sendInitialNewView() {
+		int leader = getLeader(1);
+		Message msg = new Message(MsgType.NEW_VIEW, 0, replicaID, null, null);
+		sendMessage(leader, msg);
+	}
+
 	/** @return true if the view completed successfully, false on timeout */
 	private boolean runLeaderPhase() throws InterruptedException {
 		QuorumCertificate highQC = null;
 
-		if (currentView == 1) {
-		} else {
-			Map<Integer, Message> newViews = new HashMap<>();
+		// Always collect n-f NEW_VIEW messages (including View 1)
+		Map<Integer, Message> newViews = new HashMap<>();
 
-			while (newViews.size() < quorumSize) {
-				Message msg = pullMessage(MsgType.NEW_VIEW, currentView - 1);
-				if (msg == null) return false;
-				newViews.put(msg.getSenderId(), msg);
-			}
+		while (newViews.size() < quorumSize) {
+			Message msg = pullMessage(MsgType.NEW_VIEW, currentView - 1);
+			if (msg == null) return false;
+			newViews.put(msg.getSenderId(), msg);
+		}
 
-			for (Message m : newViews.values()) {
-				if (m.getSenderId() < 0 || m.getSenderId() >= numReplicas) continue;
-				QuorumCertificate qc = m.getJustify();
-				if (qc != null
-						&& qc.getType() == MsgType.PREPARE
-						&& qc.getViewNumber() > 0
-						&& qc.getViewNumber() < currentView
-						&& qc.verify(crypto, thresholdCrypto, quorumSize)) {
-					if (highQC == null || qc.getViewNumber() > highQC.getViewNumber())
-						highQC = qc;
-				}
+		// Null-safe highQC computation: if all QCs are null (View 1), highQC stays null
+		for (Message m : newViews.values()) {
+			if (m.getSenderId() < 0 || m.getSenderId() >= numReplicas) continue;
+			QuorumCertificate qc = m.getJustify();
+			if (qc != null
+					&& qc.getType() == MsgType.PREPARE
+					&& qc.getViewNumber() > 0
+					&& qc.getViewNumber() < currentView
+					&& qc.verify(crypto, thresholdCrypto, quorumSize)) {
+				if (highQC == null || qc.getViewNumber() > highQC.getViewNumber())
+					highQC = qc;
 			}
 		}
 
