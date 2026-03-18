@@ -244,4 +244,51 @@ public class HotStuffStep4Test {
 			stopAll(replicas);
 		}
 	}
+
+	@Test
+	void testTwoCrashesCannotReachConsensus() throws Exception {
+		int n = 4;
+		HotStuff[] replicas = createReplicas(n, BASE_PORT + 500);
+
+		try {
+			for (HotStuff r : replicas)
+				r.setBaseTimeout(1000);
+
+			int crashedReplica1 = 2;
+			int crashedReplica2 = 3;
+
+			List<List<String>> decisions = new ArrayList<>();
+			for (int i = 0; i < n; i++) {
+				List<String> replicaDecisions = java.util.Collections.synchronizedList(new ArrayList<>());
+				decisions.add(replicaDecisions);
+				replicas[i].setOnDecide(cmd -> replicaDecisions.add(cmd));
+			}
+
+			// Only start the honest, non-crashed replicas
+			for (int i = 0; i < n; i++) {
+				if (i != crashedReplica1 && i != crashedReplica2) {
+					replicas[i].start();
+				}
+			}
+			Thread.sleep(200);
+
+			for (int i = 0; i < n; i++) {
+				if (i != crashedReplica1 && i != crashedReplica2) {
+					replicas[i].propose("TwoCrashes");
+				}
+			}
+
+			// Wait a reasonable amount of time to ensure they don't decide
+			Thread.sleep(8000);
+
+			// n=4, f=1. Quorum is n-f=3. With 2 crashes, only 2 remain, so they shouldn't reach consensus
+			for (int i = 0; i < n; i++) {
+				if (i == crashedReplica1 || i == crashedReplica2) continue;
+				assertEquals(0, decisions.get(i).size(),
+						"Honest replica " + i + " should NOT have decided with 2 crashed replicas (insufficient for quorum)");
+			}
+		} finally {
+			stopAll(replicas);
+		}
+	}
 }

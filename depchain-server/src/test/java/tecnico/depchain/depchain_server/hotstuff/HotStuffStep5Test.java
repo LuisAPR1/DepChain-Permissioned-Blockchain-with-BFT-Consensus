@@ -700,10 +700,6 @@ public class HotStuffStep5Test {
 		}
 	}
 
-	/**
-	 * Verifies that sender ID validation works: a Byzantine replica that spoofs
-	 * its senderId to an out-of-range value (-1) has its votes silently rejected.
-	 */
 	@Test
 	void testFilterSpoofsSenderIdOutOfRange() throws Exception {
 		int n = 4;
@@ -743,6 +739,63 @@ public class HotStuffStep5Test {
 			for (int i = 0; i < n; i++) {
 				assertEquals(1, decisions.get(i).size());
 				assertEquals("OutOfRangeIdTest", decisions.get(i).get(0));
+			}
+		} finally {
+			stopAll(replicas);
+		}
+	}
+
+	/**
+	 * Byzantine replica explicitly corrupts its BLS partial signature in its vote messages.
+	 * The leader's signature verification will reject the BLS partial signature.
+	 * The system must still reach consensus using the remaining 3 honest replicas.
+	 */
+	@Test
+	void testInvalidBLSPartialSignature() throws Exception {
+		int n = 4;
+		int byzantineId = 1;
+		HotStuff[] replicas = createHonestReplicas(n, BASE_PORT + 1300);
+
+		try {
+			// Byzantine replica corrupts the BLS partialSignature
+			replicas[byzantineId].setOutgoingFilter((dest, msg) -> {
+				byte[] pSig = msg.getPartialSignature();
+				if (pSig != null && pSig.length > 0) {
+					byte[] corruptedSig = Arrays.copyOf(pSig, pSig.length);
+					// explicitly corrupt the BLS signature by modifying the first and last byte
+					corruptedSig[0] ^= 0x5A;
+					corruptedSig[corruptedSig.length - 1] ^= 0x5A;
+
+					return new Message(msg.getType(), msg.getViewNumber(),
+							msg.getSenderId(), msg.getTreeNode(),
+							msg.getJustify(), corruptedSig);
+				}
+				return msg;
+			});
+
+			CountDownLatch latch = new CountDownLatch(n);
+			List<List<String>> decisions = new ArrayList<>();
+			for (int i = 0; i < n; i++) {
+				List<String> rd = java.util.Collections.synchronizedList(new ArrayList<>());
+				decisions.add(rd);
+				replicas[i].setOnDecide(cmd -> {
+					rd.add(cmd);
+					latch.countDown();
+				});
+			}
+
+			for (HotStuff r : replicas) r.start();
+			Thread.sleep(200);
+
+			// Propose from an honest replica (Replica 2 will be view 2 leader)
+			replicas[2].propose("InvalidBLSPartialSig");
+
+			assertTrue(latch.await(15, TimeUnit.SECONDS),
+					"System should reach consensus despite Byzantine replica corrupting its BLS partial signature");
+
+			for (int i = 0; i < n; i++) {
+				assertEquals(1, decisions.get(i).size(), "Replica " + i + " should have 1 decision");
+				assertEquals("InvalidBLSPartialSig", decisions.get(i).get(0));
 			}
 		} finally {
 			stopAll(replicas);
