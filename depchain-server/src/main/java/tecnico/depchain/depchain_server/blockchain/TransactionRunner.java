@@ -37,7 +37,7 @@ public class TransactionRunner {
 	}
 
 	private boolean executeTransfer(Transaction tx) {
-		MutableAccount sender = updater.getAccount(tx.sender());
+		MutableAccount sender = updater.getAccount(tx.from());
 		MutableAccount receiver = updater.getAccount(tx.to());
 		MutableAccount minterAccount = updater.getAccount(minter);
 
@@ -55,7 +55,7 @@ public class TransactionRunner {
 	}
 
 	private boolean executeContract(Transaction tx) {
-		MutableAccount sender = updater.getAccount(tx.sender());
+		MutableAccount sender = updater.getAccount(tx.from());
 		MutableAccount receiver = updater.getAccount(tx.to());
 		MutableAccount minterAccount = updater.getAccount(minter);
 
@@ -69,7 +69,7 @@ public class TransactionRunner {
 		transfer(sender, minterAccount, BASE_FEE);
 
 		// Actual execution
-		return execute(tx.sender(), minterAccount.getCode(), tx.data(), tx.gasPrice(), tx.gasLimit());
+		return execute(tx.from(), minterAccount.getCode(), tx.data(), tx.gasPrice(), tx.gasLimit());
 	}
 
 	private void transfer(MutableAccount src, MutableAccount dest, Wei amount) {

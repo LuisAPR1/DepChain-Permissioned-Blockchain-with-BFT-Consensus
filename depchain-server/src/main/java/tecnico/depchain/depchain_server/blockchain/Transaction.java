@@ -9,15 +9,15 @@ import org.hyperledger.besu.datatypes.Wei;
 
 public record Transaction(
 		BigInteger nonce,
+		Address from,
+		Address to,
 		Wei gasPrice,
 		Wei maxPriorityFeePerGas,
 		Wei maxFeePerGas,
 		long gasLimit,
-		Address to,
 		Wei value,
 		Bytes data,
 		BigInteger v,
 		BigInteger r,
-		BigInteger s,
-		Address sender) implements Serializable {
+		BigInteger s) implements Serializable {
 }
