@@ -1,8 +1,5 @@
 package tecnico.depchain.depchain_server.blockchain;
 
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-
 import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Wei;
@@ -10,14 +7,14 @@ import org.hyperledger.besu.evm.EvmSpecVersion;
 import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.fluent.EVMExecutor;
-import org.hyperledger.besu.evm.tracing.StandardJsonTracer;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
 public class TransactionRunner {
 	private WorldUpdater updater;
 	private Address minter;
 
-	private final Wei BASE_FEE = Wei.of(21_000);
+	// Gas is a unit of computational effort, not a value in Wei (currency). The final cost is gas * gasPrice. Wei unit used later on 
+	private final long BASE_FEE_GAS = 21_000L;
 
 	public TransactionRunner(WorldUpdater updater, Address minter) {
 		this.updater = updater;
@@ -41,15 +38,30 @@ public class TransactionRunner {
 		MutableAccount receiver = updater.getAccount(tx.to());
 		MutableAccount minterAccount = updater.getAccount(minter);
 
-		Wei valueAndFee = tx.value().add(BASE_FEE);
+		long gasLimit = tx.gasLimit();
+		if (gasLimit < BASE_FEE_GAS || tx.gasPrice().isZero()) return false;
 
-		if (sender.getBalance().lessThan(valueAndFee))
-		{
+		Wei upfrontCost = tx.value().add(tx.gasPrice().multiply(Wei.of(gasLimit)));
+		if (sender.getBalance().lessThan(upfrontCost)) {
 			return false;
 		}
 
-		transfer(sender, receiver, tx.value());
-		transfer(sender, minterAccount, BASE_FEE);
+		// Deduct upfront cost
+		sender.setBalance(sender.getBalance().subtract(upfrontCost));
+
+		// Transfer value to receiver
+		receiver.setBalance(receiver.getBalance().add(tx.value()));
+
+		// Calculate Gas Used and Fees
+		long gasUsed = BASE_FEE_GAS;
+		Wei actualFee = tx.gasPrice().multiply(Wei.of(gasUsed));
+		Wei refund = tx.gasPrice().multiply(Wei.of(gasLimit - gasUsed));
+
+		// Refund unused gas to sender
+		sender.setBalance(sender.getBalance().add(refund));
+		
+		// Give actual fee to minter
+		minterAccount.setBalance(minterAccount.getBalance().add(actualFee));
 
 		return true;
 	}
@@ -59,36 +71,71 @@ public class TransactionRunner {
 		MutableAccount receiver = updater.getAccount(tx.to());
 		MutableAccount minterAccount = updater.getAccount(minter);
 
-		Wei valueAndFee = tx.value().add(BASE_FEE);
+		long gasLimit = tx.gasLimit();
+		if (gasLimit < BASE_FEE_GAS || tx.gasPrice().isZero()) return false;
 
-		if (sender.getBalance().lessThan(valueAndFee))
+		Wei upfrontCost = tx.value().add(tx.gasPrice().multiply(Wei.of(gasLimit)));
+		if (sender.getBalance().lessThan(upfrontCost)) {
 			return false;
+		}
 
-		// Smart contract invocations can also transfer
-		transfer(sender, receiver, tx.value());
-		transfer(sender, minterAccount, BASE_FEE);
+		// Deduct upfront cost
+		sender.setBalance(sender.getBalance().subtract(upfrontCost));
 
-		// Actual execution
-		return execute(tx.from(), minterAccount.getCode(), tx.data(), tx.gasPrice(), tx.gasLimit());
+		// Smart contract invocations can also transfer native value manually
+		receiver.setBalance(receiver.getBalance().add(tx.value()));
+
+		// Actual execution on the EVM
+		GasTracer tracer = execute(tx.from(), tx.to(), receiver.getCode(), tx.data(), tx.gasPrice(), gasLimit);
+		
+		long remainingGas = tracer.getRemainingGas();
+		if (remainingGas < 0) remainingGas = 0;
+
+		// Se a EVM abortou (ex: revert, falha no access control, out of gas)
+		if (!tracer.isSuccess()) {
+			// Reverter a transferência do tx.value() que fizemos manualmente
+			receiver.setBalance(receiver.getBalance().subtract(tx.value()));
+			// Devolvemos apenas o tx.value() ao sender. O custo do gás falhado continua a ser cobrado!
+			sender.setBalance(sender.getBalance().add(tx.value()));
+		}
+
+		long gasUsed = gasLimit - remainingGas;
+		Wei actualFee = tx.gasPrice().multiply(Wei.of(gasUsed));
+		Wei refund = tx.gasPrice().multiply(Wei.of(remainingGas));
+
+		// Refund unused gas to sender
+		sender.setBalance(sender.getBalance().add(refund));
+		
+		// Give actual fee to minter
+		minterAccount.setBalance(minterAccount.getBalance().add(actualFee));
+
+		return true;
 	}
 
-	private void transfer(MutableAccount src, MutableAccount dest, Wei amount) {
-		src.setBalance(src.getBalance().subtract(amount));
-		dest.setBalance(dest.getBalance().add(amount));
+	private static class GasTracer implements org.hyperledger.besu.evm.tracing.OperationTracer {
+		private long remainingGas = 0;
+		private boolean success = false;
+		@Override
+		public void traceContextExit(org.hyperledger.besu.evm.frame.MessageFrame frame) {
+			if (frame.getMessageFrameStack().isEmpty() || frame.getDepth() == 0) {
+				this.remainingGas = frame.getRemainingGas();
+				this.success = frame.getState() == org.hyperledger.besu.evm.frame.MessageFrame.State.COMPLETED_SUCCESS;
+			}
+		}
+		public long getRemainingGas() { return remainingGas; }
+		public boolean isSuccess() { return success; }
 	}
 
-	private boolean execute(Address sender, Bytes code, Bytes selectorArgs, Wei gasPrice, long gasLimit) {
+	private GasTracer execute(Address sender, Address receiver, Bytes code, Bytes selectorArgs, Wei gasPrice, long gasLimit) {
 
 		EVMExecutor executor = EVMExecutor.evm(EvmSpecVersion.CANCUN);
 
-		// Set tracer (for output reading)
-		ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-        PrintStream printStream = new PrintStream(byteArrayOutputStream);
-		StandardJsonTracer tracer = new StandardJsonTracer(printStream, true, true, true, true);
+		// Use custom tracer to capture gas
+		GasTracer tracer = new GasTracer();
 		executor.tracer(tracer);
 
-		// Set fees
-		executor.baseFee(BASE_FEE);
+		// Set configurations
+		executor.baseFee(Wei.ZERO); 
 		executor.gasLimit(gasLimit);
 		executor.gasPriceGWei(gasPrice);
 
@@ -98,13 +145,11 @@ public class TransactionRunner {
 
 		// Other sets
 		executor.sender(sender);
-		executor.receiver(minter);
+		executor.receiver(receiver);
 		executor.worldUpdater(updater);
 
 		// Run actual contract code
 		executor.execute();
-
-		//REVIEW: What to do with return values?
-		return true; //REVIEW: Does it ever not return true?
+		return tracer;
 	}
 }

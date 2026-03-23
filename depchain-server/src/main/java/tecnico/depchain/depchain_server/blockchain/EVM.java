@@ -42,6 +42,15 @@ public class EVM {
 
 	public boolean executeBlock(Block block, Address minter, boolean commit) {
 		TransactionRunner runner = new TransactionRunner(updater.updater(), minter);
+		// Statement: The execution order of these transactions should be based on transaction fees
+		// FIXME: Risk of BFT fork. Since replicas reorder the block locally, if there are two transactions
+		// with exactly the same gasPrice, the tie may be resolved differently across machines
+		// (depending on the original arrival order in the mempool).
+		// In a strict BFT system, we would use a deterministic tie-breaker (e.g., hash).
+		// We assume this risk for simplicity, given that we only have a single Leader dictating the block.
+		block.transactions().sort(
+			java.util.Comparator.comparing((Transaction t) -> t.gasPrice()).reversed()
+		);
 
 		for (var tx : block.transactions())
 			if (!runner.executeTransaction(tx))
@@ -52,7 +61,6 @@ public class EVM {
 
 		return true;
 	}
-
 	public boolean executeTransaction(Transaction tx, Address minter, boolean commit) {
 		TransactionRunner runner = new TransactionRunner(updater.updater(), minter);
 		if (!runner.executeTransaction(tx))
