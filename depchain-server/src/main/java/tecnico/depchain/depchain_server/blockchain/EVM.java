@@ -25,6 +25,10 @@ public class EVM {
 		return singleton;
 	}
 
+	public WorldUpdater getUpdater() {
+		return updater;
+	}
+
 	public void createEOA(Address address, Wei balance) {
 		MutableAccount eoa = updater.createAccount(address);
 		eoa.setNonce(0);

@@ -58,20 +58,27 @@ contract ISTCoin is ERC20 {
 
     /**
      * @dev Requisito do guião: Validar com o Access Control antes de um 'transfer'.
+     * Verifica se quem INICIA a transferência tem permissão.
      */
     function transfer(address to, uint256 amount) public virtual override returns (bool) {
-        // Verifica se quem está a invocar a transação tem permissão
-        require(accessControlContract.isAllowedToTransfer(_msgSender()), "ISTCoin: Transferencia bloqueada pelo Access Control");
+        require(
+            accessControlContract.isAllowedToTransfer(_msgSender()),
+            "ISTCoin: Transferencia bloqueada pelo Access Control"
+        );
         
         return super.transfer(to, amount);
     }
 
     /**
      * @dev Requisito do guião: Validar com o Access Control antes de um 'transferFrom'.
+     * CORREÇÃO: Deve validar o DONO DOS FUNDOS (from) e não o spender.
      */
     function transferFrom(address from, address to, uint256 amount) public virtual override returns (bool) {
-        // Verifica se quem está a invocar a transação (o spender) tem permissão
-        require(accessControlContract.isAllowedToTransfer(_msgSender()), "ISTCoin: Transferencia bloqueada pelo Access Control");
+        // Verifica se a conta de origem dos fundos tem permissão
+        require(
+            accessControlContract.isAllowedToTransfer(from),
+            "ISTCoin: Conta origem bloqueada pelo Access Control"
+        );
         
         return super.transferFrom(from, to, amount);
     }
