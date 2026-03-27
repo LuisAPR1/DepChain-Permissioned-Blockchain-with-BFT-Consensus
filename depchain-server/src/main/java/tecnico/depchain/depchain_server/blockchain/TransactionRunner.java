@@ -31,11 +31,13 @@ public class TransactionRunner {
 		if (tx.to() == null) {
 			return executeContractCreation(tx) != null;
 		}
-		Account destination = updater.get(tx.to());
-		if (destination != null && destination.hasCode())
-			return executeContract(tx);
-		else
-			return executeTransfer(tx);
+
+		if (tx.data() != null)
+			if (!executeContract(tx)) return false;
+		if (tx.value() != Wei.ZERO)
+			if (!executeTransfer(tx)) return false;
+
+		return true;
 	}
 
 	public Address executeContractCreation(Transaction tx) {
