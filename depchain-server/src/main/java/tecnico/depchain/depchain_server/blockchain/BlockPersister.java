@@ -177,7 +177,7 @@ public class BlockPersister {
                 obj.add("to", JsonNull.INSTANCE);
             }
             obj.addProperty("gasLimit", tx.gasLimit());
-            obj.addProperty("gasPrice", tx.gasPrice() != null ? tx.gasPrice().toBigInteger().longValue() : 0);
+            obj.addProperty("gasPrice", tx.gasPrice() != null ? tx.gasPrice().toBigInteger().toString() : "0");
             obj.addProperty("value", tx.value() != null ? tx.value().toBigInteger().toString() : "0");
             obj.addProperty("data", tx.data() != null ? tx.data().toHexString() : "");
             return obj;
@@ -200,8 +200,8 @@ public class BlockPersister {
             Address to = obj.has("to") && !obj.get("to").isJsonNull()
                     ? Address.fromHexString(obj.get("to").getAsString()) : null;
             long gasLimit = obj.has("gasLimit") ? obj.get("gasLimit").getAsLong() : 0;
-            Wei gasPrice = obj.has("gasPrice")
-                    ? Wei.of(obj.get("gasPrice").getAsLong()) : Wei.ZERO;
+            Wei gasPrice = obj.has("gasPrice") && !obj.get("gasPrice").isJsonNull()
+                    ? Wei.of(new BigInteger(obj.get("gasPrice").getAsString())) : Wei.ZERO;
             Wei value = obj.has("value") && !obj.get("value").isJsonNull()
                     ? Wei.of(new BigInteger(obj.get("value").getAsString())) : Wei.ZERO;
             Bytes data = obj.has("data") && !obj.get("data").isJsonNull()
