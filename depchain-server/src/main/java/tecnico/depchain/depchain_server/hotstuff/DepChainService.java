@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 import tecnico.depchain.depchain_server.blockchain.Mempool;
 
 public class DepChainService implements ConsensusUpcall {
+    //TODO: TRASH everything that uses String commands instead of transaction/blocks
     private final int replicaID;
     private final int numReplicas;
     private final HotStuff hotStuff;

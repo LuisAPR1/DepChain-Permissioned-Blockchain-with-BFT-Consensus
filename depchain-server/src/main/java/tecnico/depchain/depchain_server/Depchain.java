@@ -25,6 +25,7 @@ import tecnico.depchain.depchain_server.hotstuff.CryptoService;
 import tecnico.depchain.depchain_server.hotstuff.DepChainService;
 
 public class Depchain {
+	//TODO: TRASH everything that uses String commands instead of transaction/blocks
 	private static DepChainService service;
 	private static Map<InetSocketAddress, AuthenticatedPerfectLink> links = new HashMap<>();
 	private static Map<String, InetSocketAddress> requestSenderMap = new HashMap<>();

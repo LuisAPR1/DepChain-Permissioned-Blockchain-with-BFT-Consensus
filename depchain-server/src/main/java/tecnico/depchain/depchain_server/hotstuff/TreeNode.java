@@ -8,6 +8,7 @@ import tecnico.depchain.depchain_common.DepchainUtils;
 
 public class TreeNode implements Serializable {
 	private byte[] parentHash;
+	//TODO: TRASH everything that uses String commands instead of transaction/blocks
 	private String command;
 	private byte[] ownHash;
 

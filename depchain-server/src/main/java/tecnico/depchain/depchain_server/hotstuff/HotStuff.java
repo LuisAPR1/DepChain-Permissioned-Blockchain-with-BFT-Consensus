@@ -21,6 +21,7 @@ import tecnico.depchain.depchain_common.broadcasts.BestEffortBroadcast;
 import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
 
 public class HotStuff {
+	//TODO: TRASH everything that uses String commands instead of transaction/blocks
 	private final int replicaID;
 	private final int numReplicas;
 	private final int quorumSize; // n - f
@@ -43,8 +44,8 @@ public class HotStuff {
 	private final List<Message> outOfOrderBuffer = new ArrayList<>();
 
 	private Consumer<String> onDecide = null;
-	private final ConsensusUpcall upcall; 
- 
+	private final ConsensusUpcall upcall;
+
 	// Outgoing message filter for Byzantine testing (Step 5).
 	// Applied before every send/broadcast. Return null to drop the message.
 	// Takes (destinationId, originalMessage) and returns modifiedMessage.
@@ -205,14 +206,14 @@ public class HotStuff {
 			msg = filter.apply(-1, msg);
 			if (msg == null) return;
 		}
-		
+
 		if (msg.getMessageSignature() == null) {
 			msg.setMessageSignature(crypto.sign(msg.getSignableBytes()));
 		}
-		
+
 		// Self-delivery
 		messageQueue.offer(msg);
-		
+
 		// Broadcast to others using the native layer
 		broadcast.broadcast(msg.serialize());
 	}
@@ -548,7 +549,7 @@ public class HotStuff {
 		// Equivocation protection: explicitly fail if already voted for a different proposal in this view
 		if (proposal != null) {
 			if (votedNodeThisView != null && !Arrays.equals(votedNodeThisView.getHash(), proposal.getHash())) {
-				return false; 
+				return false;
 			}
 			votedNodeThisView = proposal;
 		}
