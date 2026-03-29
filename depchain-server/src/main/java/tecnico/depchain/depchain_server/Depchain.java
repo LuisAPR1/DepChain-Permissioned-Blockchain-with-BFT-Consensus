@@ -15,6 +15,8 @@ import java.util.Map;
 import tecnico.depchain.depchain_common.DepchainClient;
 import tecnico.depchain.depchain_common.DepchainMember;
 import tecnico.depchain.depchain_common.Membership;
+import tecnico.depchain.depchain_common.blockchain.SignedTransaction;
+import tecnico.depchain.depchain_common.blockchain.Transaction;
 import tecnico.depchain.depchain_common.links.AuthenticatedPerfectLink;
 import tecnico.depchain.depchain_common.messages.ConfirmMessage;
 import tecnico.depchain.depchain_common.messages.TransactionMessage;
@@ -24,9 +26,8 @@ import tecnico.depchain.depchain_server.hotstuff.HotStuff;
 
 public class Depchain {
 	private static Map<InetSocketAddress, AuthenticatedPerfectLink> links = new HashMap<>();
-	//FIXME: Must rewrite to move feature to mempool (since this we get blocks and must map transactions)
-	private static Map<String, InetSocketAddress> requestSenderMap = new HashMap<>();
-	private static Map<String, Long> requestIdMap = new HashMap<>();
+	private static Map<Transaction, InetSocketAddress> requestSenderMap = new HashMap<>();
+	private static Map<Transaction, Long> requestIdMap = new HashMap<>();
 
 	private static HotStuff hotStuff;
 
@@ -74,16 +75,23 @@ public class Depchain {
 		if (txMsg == null)
 			return;
 
-		hotStuff.propose(txMsg.getSignedTransaction());
-		//TODO: Map response or set in mempool
+		SignedTransaction signedTx = txMsg.getSignedTransaction();
+		//TODO: Verify msg
+
+		hotStuff.propose(signedTx);
+
+		requestSenderMap.put(signedTx.tx(), sender);
+		requestIdMap.put(signedTx.tx(), txMsg.getSeqNum());
 	}
 
 	private static void onDecide(Block blk) {
-		long id = requestIdMap.get(blk);
-		InetSocketAddress requester = requestSenderMap.get(blk);
-		AuthenticatedPerfectLink link = links.get(requester);
+		for (Transaction tx : blk.getTransactions()) {
+			long id = requestIdMap.get(tx);
+			InetSocketAddress requester = requestSenderMap.get(tx);
+			AuthenticatedPerfectLink link = links.get(requester);
 
-		ConfirmMessage msg = new ConfirmMessage(id, true);
-		link.transmit(msg.serialize());
+			ConfirmMessage msg = new ConfirmMessage(id, true);
+			link.transmit(msg.serialize());
+		}
 	}
 }

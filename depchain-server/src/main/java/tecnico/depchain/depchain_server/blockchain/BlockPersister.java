@@ -171,7 +171,7 @@ public class BlockPersister {
         public JsonElement serialize(Transaction tx, java.lang.reflect.Type typeOfSrc,
                                      JsonSerializationContext context) {
             JsonObject obj = new JsonObject();
-            obj.addProperty("nonce", tx.nonce() != null ? tx.nonce().toString() : null);
+            obj.addProperty("nonce", tx.nonce());
             obj.addProperty("from", tx.from() != null ? tx.from().toHexString() : null);
             if (tx.to() != null) {
                 obj.addProperty("to", tx.to().toHexString());
@@ -195,8 +195,8 @@ public class BlockPersister {
                                        JsonDeserializationContext context) throws JsonParseException {
             JsonObject obj = json.getAsJsonObject();
 
-            BigInteger nonce = obj.has("nonce") && !obj.get("nonce").isJsonNull()
-                    ? new BigInteger(obj.get("nonce").getAsString()) : BigInteger.ZERO;
+            long nonce = obj.has("nonce") && !obj.get("nonce").isJsonNull()
+                    ? obj.get("nonce").getAsLong() : 0;
             Address from = obj.has("from") && !obj.get("from").isJsonNull()
                     ? Address.fromHexString(obj.get("from").getAsString()) : null;
             Address to = obj.has("to") && !obj.get("to").isJsonNull()

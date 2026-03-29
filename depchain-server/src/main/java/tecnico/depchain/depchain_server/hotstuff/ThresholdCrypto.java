@@ -25,20 +25,18 @@ public class ThresholdCrypto {
 	private final int replicaId;
 
 	private final Pairing pairing;
-	private final Element generator; 
-	private final Element globalPublicKey; 
-	private final Element myPrivateShare; 
+	private final Element generator;
+	private final Element globalPublicKey;
+	private final Element myPrivateShare;
 	private final int threshold;
-	private final int numReplicas;
 
-	private final Map<Integer, Element> publicShares; 
+	private final Map<Integer, Element> publicShares;
 
-	public ThresholdCrypto(int replicaId, int threshold, int numReplicas,
+	public ThresholdCrypto(int replicaId, int threshold,
 			String pairingParamsStr, byte[] generatorBytes, byte[] globalPublicKeyBytes,
 			byte[] myPrivateShareBytes, Map<Integer, byte[]> publicSharesBytes) {
 		this.replicaId = replicaId;
 		this.threshold = threshold;
-		this.numReplicas = numReplicas;
 
 		PropertiesParameters params = new PropertiesParameters();
 		try {
@@ -83,7 +81,7 @@ public class ThresholdCrypto {
 		}
 	}
 
-	
+
 	public boolean verifyPartial(int senderId, byte[] data, byte[] signatureBytes) {
 		if (data == null || signatureBytes == null) return false;
 		if (!publicShares.containsKey(senderId)) return false;
@@ -127,7 +125,7 @@ public class ThresholdCrypto {
 
 			for (int i : S) {
 				Element lambda = zr.newOneElement();
-				int xi = i + 1; 
+				int xi = i + 1;
 				for (int j : S) {
 					if (i != j) {
 						int xj = j + 1;
@@ -148,7 +146,7 @@ public class ThresholdCrypto {
 		}
 	}
 
-	
+
 	public boolean verifyThreshold(byte[] data, byte[] thresholdSignatureBytes) {
 		if (data == null || thresholdSignatureBytes == null) return false;
 		try {

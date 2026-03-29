@@ -40,7 +40,7 @@ public class Depchain {
 	private String ownAddress; // Hex address "0x..." for the client's EOA
 
 	// Auto-incrementing nonce for transaction ordering
-	private BigInteger currentNonce = BigInteger.ZERO;
+	private long currentNonce = 0;
 
 	public Depchain(int clientId, List<InetSocketAddress> locals, PrivateKey ownKey, List<InetSocketAddress> remotes, List<PublicKey> remoteKeys)
 		throws SocketException, NoSuchAlgorithmException, InvalidKeyException, IllegalArgumentException {
@@ -65,7 +65,7 @@ public class Depchain {
 	 * Manually sets the current nonce.
 	 * Useful for testing or when the client restarts and needs to sync with the network.
 	 */
-	public void setNonce(BigInteger nonce) {
+	public void setNonce(long nonce) {
 		this.currentNonce = nonce;
 	}
 
@@ -73,7 +73,7 @@ public class Depchain {
 	 * Synchronizes the client's local nonce with the server's committed or pending state.
 	 * Helps recover from desynchronization if a transaction was silently discarded.
 	 */
-	public void syncNonceWithServer(BigInteger serverNonce) {
+	public void syncNonceWithServer(long serverNonce) {
 		this.currentNonce = serverNonce;
 	}
 
@@ -167,7 +167,7 @@ public class Depchain {
 
 		// Nonce is incremented optimistically at creation time to allow pipelining
 		// multiple concurrent transactions. Use syncNonceWithServer() if desync occurs.
-		this.currentNonce = this.currentNonce.add(BigInteger.ONE);
+		currentNonce += 1;
 		return msg;
 	}
 
@@ -200,7 +200,7 @@ public class Depchain {
 		SignedTransaction signedTx = SignedTransaction.signTansaction(tx, ownKey);
 		TransactionMessage msg = new TransactionMessage(clientId, signedTx);
 
-		this.currentNonce = this.currentNonce.add(BigInteger.ONE);
+		currentNonce += 1;
 		return msg;
 	}
 

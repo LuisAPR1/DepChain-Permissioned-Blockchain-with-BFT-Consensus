@@ -107,7 +107,7 @@ public class Block implements Serializable {
      */
     private byte[] canonicalTransactionBytes(Transaction tx) {
         StringBuilder sb = new StringBuilder();
-        sb.append(tx.nonce() != null ? tx.nonce().toString() : "null").append('|');
+        sb.append(tx.nonce()).append('|');
         sb.append(tx.from() != null ? tx.from().toHexString() : "null").append('|');
         sb.append(tx.to() != null ? tx.to().toHexString() : "null").append('|');
         sb.append(tx.gasPrice() != null ? tx.gasPrice().toBigInteger().toString() : "0").append('|');

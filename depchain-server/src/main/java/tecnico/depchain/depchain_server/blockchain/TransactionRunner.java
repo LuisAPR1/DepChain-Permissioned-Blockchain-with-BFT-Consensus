@@ -4,6 +4,7 @@ import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.evm.EvmSpecVersion;
+import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.fluent.EVMExecutor;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
@@ -37,6 +38,12 @@ public class TransactionRunner {
 			return executeContractCreation(tx) != null;
 		}
 
+		Account sender = updater.getAccount(tx.from());
+
+		// Nonce check
+		if (tx.nonce() != sender.getNonce() + 1)
+			return false;
+
 		if (tx.data() != null)
 			if (!executeContract(tx)) return false;
 		if (tx.value() != Wei.ZERO)
@@ -61,7 +68,7 @@ public class TransactionRunner {
 		sender.setBalance(sender.getBalance().subtract(upfrontCost));
 
 		// Generate contract address: keccak256(rlp(sender, nonce))
-		Address contractAddress = Address.contractAddress(tx.from(), tx.nonce().longValue());
+		Address contractAddress = Address.contractAddress(tx.from(), tx.nonce());
 
 		// Create the contract account in the world updater before running init code
 		MutableAccount contractAccount = updater.createAccount(contractAddress);

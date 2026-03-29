@@ -64,7 +64,7 @@ public class GenesisLoader {
                 TransactionRunner runner = new TransactionRunner(evm.getUpdater(), sender);
 
                 Transaction t = new Transaction(
-                        BigInteger.valueOf(currentNonce++),
+                        currentNonce++,
                         sender,
                         tx.to != null ? Address.fromHexString(tx.to) : null,
                         Wei.of(tx.gasPrice), // gasPrice

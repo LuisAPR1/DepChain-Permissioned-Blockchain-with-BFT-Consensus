@@ -92,8 +92,8 @@ public class EVM {
 			if (tx.to() != null) knownAddresses.add(tx.to());
 
 			// For contract creation, pre-register the derived contract address
-			if (tx.to() == null && tx.from() != null && tx.nonce() != null) {
-				Address contractAddr = Address.contractAddress(tx.from(), tx.nonce().longValue());
+			if (tx.to() == null && tx.from() != null) {
+				Address contractAddr = Address.contractAddress(tx.from(), 0);
 				knownAddresses.add(contractAddr);
 			}
 
@@ -114,8 +114,8 @@ public class EVM {
 		knownAddresses.add(minter);
 		if (tx.from() != null) knownAddresses.add(tx.from());
 		if (tx.to() != null) knownAddresses.add(tx.to());
-		if (tx.to() == null && tx.from() != null && tx.nonce() != null) {
-			knownAddresses.add(Address.contractAddress(tx.from(), tx.nonce().longValue()));
+		if (tx.to() == null && tx.from() != null) {
+			knownAddresses.add(Address.contractAddress(tx.from(), tx.nonce()));
 		}
 
 		if (!runner.executeTransaction(tx))

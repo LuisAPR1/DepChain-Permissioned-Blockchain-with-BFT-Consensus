@@ -1,6 +1,5 @@
 package tecnico.depchain.depchain_server.blockchain;
 
-import java.math.BigInteger;
 import java.security.PublicKey;
 
 import org.hyperledger.besu.datatypes.Address;
@@ -82,8 +81,8 @@ public class IncomingTransactionValidator {
 		}
 
 		// 5. Nonce check — must equal the pending nonce (no gaps, no replays)
-		BigInteger expectedNonce = mempool.getPendingNonce(tx.from());
-		if (!tx.nonce().equals(expectedNonce)) {
+		long expectedNonce = mempool.getPendingNonce(tx.from());
+		if (tx.nonce() != expectedNonce) {
 			System.err.println("[Validator] REJECTED: nonce mismatch for " + tx.from()
 					+ " (expected " + expectedNonce + ", got " + tx.nonce() + ")");
 			return false;
