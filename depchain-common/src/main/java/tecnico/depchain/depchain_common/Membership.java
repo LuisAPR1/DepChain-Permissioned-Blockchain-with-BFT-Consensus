@@ -13,7 +13,6 @@ import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 
 import org.hyperledger.besu.datatypes.Address;
@@ -21,8 +20,6 @@ import org.hyperledger.besu.datatypes.Address;
 public class Membership {
 	private static DepchainMember[] members;
 	private static DepchainClient[] clients;
-	private static Map<Address, PublicKey> accountPubKeyMap;
-	//TODO: Add account private keys as well?
 	private static PrivateKey ownPrivateKey;
 	private static boolean loaded = false;
 
@@ -61,14 +58,13 @@ public class Membership {
 				int port = Integer.parseInt(props.getProperty("client." + i + ".port"));
 				String pubKeyB64 = props.getProperty("client." + i + ".publickey");
 				PublicKey pubKey = kf.generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(pubKeyB64)));
-				clients[i] = new DepchainClient(new InetSocketAddress(host, port), pubKey);
+				Address depchainAddress = Address.fromHexString(props.getProperty("member."+i+".depchainAddress"));
+				clients[i] = new DepchainClient(new InetSocketAddress(host, port), pubKey, depchainAddress);
 			}
 
 			// Load own private key (PKCS#8, Base64-encoded)
 			String privKeyB64 = props.getProperty("node." + myId + ".privatekey");
 			ownPrivateKey = kf.generatePrivate(new PKCS8EncodedKeySpec(Base64.getDecoder().decode(privKeyB64)));
-
-			//TODO: Add loading of depchain accounts
 
 			loaded = true;
 		} catch (NoSuchAlgorithmException | InvalidKeySpecException e) {
@@ -98,7 +94,17 @@ public class Membership {
 	}
 
 	public static PublicKey getAccountPublicKey(Address address) {
-		return accountPubKeyMap.get(address);
+		for (var member : members) {
+			if (member.getDepchainAddress() == address)
+				return member.getPublicKey();
+		}
+
+		for (var client : clients) {
+			if (client.getDepchainAddress() == address)
+				return client.getPublicKey();
+		}
+
+		return null;
 	}
 
 	public static PrivateKey getOwnPrivateKey() {

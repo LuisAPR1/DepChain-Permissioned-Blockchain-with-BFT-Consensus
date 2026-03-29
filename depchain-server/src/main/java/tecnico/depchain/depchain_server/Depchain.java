@@ -66,7 +66,7 @@ public class Depchain {
 		hotStuff.start();
 
 		for (DepchainClient cli : clients) {
-			InetSocketAddress addr = cli.getAddress();
+			InetSocketAddress addr = cli.getNetAddress();
 			links.put(addr, new AuthenticatedPerfectLink(Depchain::rxHandler, local, addr, ownKey, cli.getPublicKey()));
 		}
 
