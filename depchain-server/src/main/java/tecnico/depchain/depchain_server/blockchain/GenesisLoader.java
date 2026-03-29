@@ -68,7 +68,6 @@ public class GenesisLoader {
                         sender,
                         tx.to != null ? Address.fromHexString(tx.to) : null,
                         Wei.of(tx.gasPrice), // gasPrice
-                        Wei.ZERO, Wei.ZERO, // fees
                         tx.gasLimit,
                         Wei.of(new BigInteger(tx.value)),
                         Bytes.fromHexString(tx.data)

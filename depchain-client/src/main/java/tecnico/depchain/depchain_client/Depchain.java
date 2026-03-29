@@ -153,8 +153,6 @@ public class Depchain {
 				Address.fromHexString(ownAddress),
 				Address.fromHexString(to),
 				Wei.of(new BigInteger(gasPrice)),
-				Wei.ZERO,  // maxPriorityFeePerGas (unused)
-				Wei.ZERO,  // maxFeePerGas (unused)
 				gasLimit,
 				Wei.of(new BigInteger(value)),
 				Bytes.EMPTY);  // no calldata for plain transfers
@@ -191,8 +189,6 @@ public class Depchain {
 				Address.fromHexString(ownAddress),
 				Address.fromHexString(contractAddress),
 				Wei.of(new BigInteger(gasPrice)),
-				Wei.ZERO,  // maxPriorityFeePerGas (unused)
-				Wei.ZERO,  // maxFeePerGas (unused)
 				gasLimit,
 				Wei.ZERO,  // no value transfer for contract calls
 				Bytes.fromHexString(callData));
@@ -204,10 +200,7 @@ public class Depchain {
 		return msg;
 	}
 
-	// ── Network Handler ─────────────────────────────────────────────────
-
 	private void rxHandler(byte[] data, InetSocketAddress remote) {
-		//HACK: Assumes all incoming messages are ConfirmMessage
 		ConfirmMessage msg = ConfirmMessage.deserialize(data);
 		if (msg == null) return;
 

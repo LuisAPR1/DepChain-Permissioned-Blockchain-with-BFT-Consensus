@@ -15,8 +15,6 @@ public record Transaction(
 		Address from,
 		Address to,
 		Wei gasPrice,
-		Wei maxPriorityFeePerGas,
-		Wei maxFeePerGas,
 		long gasLimit,
 		Wei value,
 		Bytes data) implements Serializable {

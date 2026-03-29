@@ -211,7 +211,6 @@ public class BlockPersister {
 
             return new Transaction(
                     nonce, from, to, gasPrice,
-                    Wei.ZERO, Wei.ZERO, // maxPriorityFeePerGas, maxFeePerGas (not used in genesis format)
                     gasLimit, value, data
             );
         }
