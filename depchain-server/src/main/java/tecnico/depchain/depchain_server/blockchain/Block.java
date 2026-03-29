@@ -1,7 +1,9 @@
 package tecnico.depchain.depchain_server.blockchain;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
-
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -61,7 +63,20 @@ public class Block implements Serializable {
     public TreeMap<String, AccountState> getState() { return state; }
     public void setState(TreeMap<String, AccountState> state) { this.state = state; }
 
-    // ── Deterministic Hashing ───────────────────────────────────────────
+    public byte[] serialize() {
+        ByteArrayOutputStream byteStream = new ByteArrayOutputStream();
+		try {
+			ObjectOutputStream objectStream = new ObjectOutputStream(byteStream);
+			objectStream.writeObject(this);
+			objectStream.flush();
+			byteStream.flush();
+		}
+		catch (IOException e) {
+			return null; //Should not happen
+		}
+
+		return byteStream.toByteArray();
+    }
 
     /**
      * Computes a deterministic SHA-256 hash of this block.

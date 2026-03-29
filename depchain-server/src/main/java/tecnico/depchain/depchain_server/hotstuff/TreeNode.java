@@ -33,7 +33,7 @@ public class TreeNode implements Serializable {
 
 	private void calculateHash()
 	{
-		byte[] blkBytes = blk.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+		byte[] blkBytes = blk.serialize();
 		ByteBuffer buf = ByteBuffer.allocate(parentHash.length + blkBytes.length);
 		buf.put(parentHash);
 		buf.put(blkBytes);
