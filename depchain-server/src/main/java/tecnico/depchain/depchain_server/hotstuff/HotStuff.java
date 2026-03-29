@@ -51,7 +51,6 @@ public class HotStuff {
 	private final List<Message> outOfOrderBuffer = new ArrayList<>();
 
 	private Consumer<Block> onDecide = null;
-	private final ConsensusUpcall upcall;
 
 	// Outgoing message filter for Byzantine testing (Step 5).
 	// Applied before every send/broadcast. Return null to drop the message.
@@ -77,15 +76,13 @@ public class HotStuff {
 	 * @param publicKeys      List of n Ed25519 public keys (index i = public key of replica i)
 	 * @param crypto          CryptoService for Ed25519 signing/verification (Step 5)
 	 * @param thresholdCrypto ThresholdCrypto for threshold QC signatures (nullable)
-	 * @param upcall          Upcall for notifying the application layer on DECIDE completion
 	 */
 	public HotStuff(
 			int replicaID, Address ownAddress, String host, int basePort, int numReplicas,
-			PrivateKey ownKey, List<PublicKey> publicKeys, CryptoService crypto, ThresholdCrypto thresholdCrypto, ConsensusUpcall upcall)
+			PrivateKey ownKey, List<PublicKey> publicKeys, CryptoService crypto, ThresholdCrypto thresholdCrypto)
 			throws SocketException, NoSuchAlgorithmException, InvalidKeyException, IllegalArgumentException {
 		this.replicaID = replicaID;
 		this.ownAddress = ownAddress;
-		this.upcall = upcall;
 		this.numReplicas = numReplicas;
 		this.crypto = crypto;
 		this.thresholdCrypto = thresholdCrypto;
@@ -384,9 +381,7 @@ public class HotStuff {
 					votedNodeThisView = null;
 
                     Block decidedThisView = decidedBlocks.getLast();
-					//REVIEW: Why two callbacks?
 					if (onDecide != null) onDecide.accept(decidedThisView);
-					if (upcall != null) upcall.onDecide(decidedThisView);
 				}
 			}
 		}
@@ -434,7 +429,7 @@ public class HotStuff {
 		if (parentNode != null)
 			linkParent(parentNode);
 
-		Block blk = waitForBlock(); //TODO: Block building logic
+		Block blk = waitForBlock();
 		if (blk == null) return false;
 
 		TreeNode proposal = createLeaf(parentNode, blk);

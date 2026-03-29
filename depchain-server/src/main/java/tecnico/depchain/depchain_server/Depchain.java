@@ -60,7 +60,8 @@ public class Depchain {
 
 		Address ownAddress = members[replicaID].getDepchainAddress();
 
-		hotStuff = new HotStuff(replicaID, ownAddress, "localhost", 42069, numReplicas, ownKey, publicKeys, crypto, null, null);
+		//TODO: Add threshold crypto
+		hotStuff = new HotStuff(replicaID, ownAddress, "localhost", 42069, numReplicas, ownKey, publicKeys, crypto, null);
 		hotStuff.setOnDecide(Depchain::onDecide);
 		hotStuff.start();
 

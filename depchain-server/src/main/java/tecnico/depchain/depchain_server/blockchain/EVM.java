@@ -31,7 +31,6 @@ public class EVM {
 	private final Set<Address> knownAddresses = new HashSet<>();
 
 	private EVM() {
-		//FIXME: Should read the state from a file or similar
 		world = new SimpleWorld();
 		updater = world.updater();
 	}
