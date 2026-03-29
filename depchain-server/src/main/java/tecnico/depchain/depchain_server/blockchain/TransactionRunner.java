@@ -40,15 +40,13 @@ public class TransactionRunner {
 
 		Account sender = updater.getAccount(tx.from());
 
+		// Sender must exist (no ghost senders)
+		if (sender == null)
+			return false;
+
 		// Nonce check
 		if (tx.nonce() != sender.getNonce() + 1)
 			return false;
-
-		//TODO: Validate:
-		// - signedTransaction
-		// - from() exists
-		// - Balances
-		// - Non-zero gas
 
 		if (tx.data() != null)
 			if (!executeContract(tx)) return false;
@@ -151,6 +149,8 @@ public class TransactionRunner {
 
 		long gasLimit = tx.gasLimit();
 		if (gasLimit < BASE_FEE_GAS || tx.gasPrice().isZero()) return false;
+
+		if (tx.gasPrice().isZero()) return false;
 
 		Wei upfrontCost = tx.value().add(tx.gasPrice().multiply(Wei.of(gasLimit)));
 		if (sender.getBalance().lessThan(upfrontCost)) {

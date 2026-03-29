@@ -33,6 +33,7 @@ import tecnico.depchain.depchain_common.blockchain.Transaction;
 public class Mempool {
 
 	//FIXME: Should allow to receive multiple transactions with same nonce, gas will sort them, once one is executed, the other is automatically reject by the runner
+	// In a nutshell: shouldn't be a map
 	// sender → (nonce → entry), TreeMap keeps nonces sorted ascending
 	private final Map<Address, TreeMap<Long, SignedTransaction>> senderQueues = new HashMap<>();
 
