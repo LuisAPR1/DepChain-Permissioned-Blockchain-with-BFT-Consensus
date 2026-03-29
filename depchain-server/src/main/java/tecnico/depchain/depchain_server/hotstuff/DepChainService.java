@@ -10,18 +10,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.function.Consumer;
 
+import tecnico.depchain.depchain_server.blockchain.Block;
 import tecnico.depchain.depchain_server.blockchain.Mempool;
 
 public class DepChainService implements ConsensusUpcall {
-    //TODO: TRASH everything that uses String commands instead of transaction/blocks
     private final int replicaID;
     private final int numReplicas;
     private final HotStuff hotStuff;
-	private Consumer<String> onDecide = null;
+	private Consumer<Block> onDecide = null;
     private Mempool mempool;
 
     // In-memory array of append-only strings representing the blockchain
-    private final List<String> blockchain = Collections.synchronizedList(new ArrayList<>());
+    private final List<Block> blockchain = Collections.synchronizedList(new ArrayList<>());
 
     public DepChainService(
             int replicaID, String host, int basePort, int numReplicas,
@@ -49,19 +49,20 @@ public class DepChainService implements ConsensusUpcall {
         this.mempool = mempool;
     }
 
-    public void setOnDecide(Consumer<String> callback) {
+    public void setOnDecide(Consumer<Block> callback) {
 		this.onDecide = callback;
 	}
 
     @Override
-    public void onDecide(String payload) {
+    public void onDecide(Block payload) {
         blockchain.add(payload);
         System.out.println("Block decided and added to the blockchain: " + payload);
         if (onDecide != null)
             onDecide(payload);
     }
 
-    public List<String> getBlockchain() {
+    public List<Block> getBlockchain() {
+        //REVIEW: Why a copy?
         return new ArrayList<>(blockchain);
     }
 

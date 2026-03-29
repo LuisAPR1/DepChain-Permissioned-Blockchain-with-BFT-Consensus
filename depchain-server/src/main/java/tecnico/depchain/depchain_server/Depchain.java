@@ -18,6 +18,7 @@ import tecnico.depchain.depchain_common.Membership;
 import tecnico.depchain.depchain_common.links.AuthenticatedPerfectLink;
 import tecnico.depchain.depchain_common.messages.ConfirmMessage;
 import tecnico.depchain.depchain_common.messages.TransactionMessage;
+import tecnico.depchain.depchain_server.blockchain.Block;
 import tecnico.depchain.depchain_server.blockchain.EVM;
 import tecnico.depchain.depchain_server.blockchain.IncomingTransactionValidator;
 import tecnico.depchain.depchain_server.blockchain.Mempool;
@@ -28,6 +29,7 @@ public class Depchain {
 	//TODO: TRASH everything that uses String commands instead of transaction/blocks
 	private static DepChainService service;
 	private static Map<InetSocketAddress, AuthenticatedPerfectLink> links = new HashMap<>();
+	//FIXME: Must rewrite to move feature to mempool (since this we get blocks and must map transactions)
 	private static Map<String, InetSocketAddress> requestSenderMap = new HashMap<>();
 	private static Map<String, Long> requestIdMap = new HashMap<>();
 
@@ -87,9 +89,9 @@ public class Depchain {
 		mempool.submitTransaction(txMsg, validator);
 	}
 
-	private static void onDecide(String command) {
-		long id = requestIdMap.get(command);
-		InetSocketAddress requester = requestSenderMap.get(command);
+	private static void onDecide(Block blk) {
+		long id = requestIdMap.get(blk);
+		InetSocketAddress requester = requestSenderMap.get(blk);
 		AuthenticatedPerfectLink link = links.get(requester);
 
 		ConfirmMessage msg = new ConfirmMessage(id, true);

@@ -17,9 +17,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
+import tecnico.depchain.depchain_common.blockchain.Transaction;
 import tecnico.depchain.depchain_common.broadcasts.BestEffortBroadcast;
+import tecnico.depchain.depchain_server.blockchain.Block;
 import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
 
+//FIXME: Initial newview = 1 on startup?
 public class HotStuff {
 	//TODO: TRASH everything that uses String commands instead of transaction/blocks
 	private final int replicaID;
@@ -29,21 +32,21 @@ public class HotStuff {
 	private final CryptoService crypto;
 	private final ThresholdCrypto thresholdCrypto;
 
-	private volatile int currentView = 1;
+	private volatile int currentView = 0;
 	private QuorumCertificate prepareQC = null;
 	private QuorumCertificate lockedQC = null;
 	private TreeNode votedNodeThisView = null;
 
 	private final Map<String, TreeNode> nodeStore = new HashMap<>();
 
-	private final List<String> decidedCommands = new ArrayList<>();
-    private final List<String> newlyDecidedThisView = new ArrayList<>();
-	private final BlockingQueue<String> pendingCommands = new LinkedBlockingQueue<>();
+	private final List<Block> decidedBlocks = new ArrayList<>();
+    private final List<Block> newlyDecidedThisView = new ArrayList<>(); //REVIEW: Should not be a list, only one block decided per view
+	private final BlockingQueue<String> pendingCommands = new LinkedBlockingQueue<>(); //REVIEW: Should probably be removed, this is the old mempool
 
 	private final BlockingQueue<Message> messageQueue = new LinkedBlockingQueue<>();
 	private final List<Message> outOfOrderBuffer = new ArrayList<>();
 
-	private Consumer<String> onDecide = null;
+	private Consumer<Block> onDecide = null;
 	private final ConsensusUpcall upcall;
 
 	// Outgoing message filter for Byzantine testing (Step 5).
@@ -139,11 +142,12 @@ public class HotStuff {
 		this.pendingCommands.offer(command);
 	}
 
-	public List<String> getDecidedCommands() {
-		return new ArrayList<>(decidedCommands);
+	public List<Block> getDecidedBlocks() {
+		//REVIEW: Why a copy?
+		return new ArrayList<>(decidedBlocks);
 	}
 
-	public void setOnDecide(Consumer<String> callback) {
+	public void setOnDecide(Consumer<Block> callback) {
 		this.onDecide = callback;
 	}
 
@@ -320,8 +324,8 @@ public class HotStuff {
 		return extendsLocked || higherView;
 	}
 
-	private TreeNode createLeaf(TreeNode parent, String command) {
-		TreeNode leaf = new TreeNode(parent, command);
+	private TreeNode createLeaf(TreeNode parent, Block blk) {
+		TreeNode leaf = new TreeNode(parent, blk);
 		storeNode(leaf);
 		return leaf;
 	}
@@ -389,11 +393,13 @@ public class HotStuff {
 					currentView++;
 					votedNodeThisView = null;
 
-                    List<String> toUpcall = new ArrayList<>(newlyDecidedThisView);
+					//REVIEW: Probably should only call once since there will only be one decision per view
+                    List<Block> toUpcall = new ArrayList<>(newlyDecidedThisView);
                     newlyDecidedThisView.clear();
-                    for (String cmd : toUpcall) {
-                        if (onDecide != null) onDecide.accept(cmd);
-                        if (upcall != null) upcall.onDecide(cmd);
+                    for (Block blk : toUpcall) {
+						//REVIEW: Why two callbacks?
+                        if (onDecide != null) onDecide.accept(blk);
+                        if (upcall != null) upcall.onDecide(blk);
                     }
 				}
 			}
@@ -407,17 +413,6 @@ public class HotStuff {
 	private void sendNewViewToNextLeader() {
 		int nextLeader = getLeader(currentView + 1);
 		sendMessage(nextLeader, makeMsg(MsgType.NEW_VIEW, null, prepareQC));
-	}
-
-	/**
-	 * Bootstrap for View 1: send a NEW_VIEW with viewNumber=0 and null QC
-	 * to the leader of View 1, so View 1 follows the same message flow as
-	 * every other view.
-	 */
-	private void sendInitialNewView() {
-		int leader = getLeader(1);
-		Message msg = new Message(MsgType.NEW_VIEW, 0, replicaID, null, null);
-		sendMessage(leader, msg);
 	}
 
 	/** @return true if the view completed successfully, false on timeout */
@@ -631,25 +626,13 @@ public class HotStuff {
 		return true;
 	}
 
-	/**
-	 * Wait for a command to propose, respecting the view deadline.
-	 * Returns null if no command arrives before the view expires.
-	 */
-	private String waitForCommand() throws InterruptedException {
-		long remaining = remainingMs();
-		if (remaining <= 0)
-			return null;
-
-		return pendingCommands.poll(remaining, TimeUnit.MILLISECONDS);
-	}
-
 	private void executeDecision(TreeNode node) {
 		if (node == null)
 			return;
-		String cmd = node.getCommand();
-		if (cmd != null && !decidedCommands.contains(cmd)) {
-			decidedCommands.add(cmd);
-            newlyDecidedThisView.add(cmd);
+		Block blk = node.getBlock();
+		if (blk != null && !decidedBlocks.contains(blk)) {
+			decidedBlocks.add(blk);
+            newlyDecidedThisView.add(blk);
 		}
 	}
 }
