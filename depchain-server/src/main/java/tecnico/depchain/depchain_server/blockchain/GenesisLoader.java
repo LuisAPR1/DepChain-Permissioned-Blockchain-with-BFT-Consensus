@@ -75,6 +75,7 @@ public class GenesisLoader {
                 );
 
                 if (tx.to == null) { // Deploy Contract
+                    //REVIEW: There may be a better way to do this that allows executeContractCreation to be private
                     Address contractAddress = runner.executeContractCreation(t);
                     if (contractAddress == null) {
                         throw new RuntimeException("Falha ao criar o contrato no Genesis");

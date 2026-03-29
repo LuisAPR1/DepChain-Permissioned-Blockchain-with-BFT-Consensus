@@ -11,8 +11,8 @@ import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 import tecnico.depchain.depchain_common.blockchain.Transaction;
 
 public class TransactionRunner {
-	private WorldUpdater updater;
-	private Address minter;
+	private final WorldUpdater updater;
+	private final Address minter;
 
 	// Gas is a unit of computational effort, not a value in Wei (currency). The final cost is gas * gasPrice. Wei unit used later on
 	private final long BASE_FEE_GAS = 21_000L;
@@ -26,6 +26,12 @@ public class TransactionRunner {
 		return updater;
 	}
 
+	/**
+	 * Executes a transaction.
+	 * Does **NOT** flush the world updater.
+	 * @param tx Transaction to execute.
+	 * @return true if transaction succeeded
+	 */
 	public boolean executeTransaction(Transaction tx) {
 		if (tx.to() == null) {
 			return executeContractCreation(tx) != null;
