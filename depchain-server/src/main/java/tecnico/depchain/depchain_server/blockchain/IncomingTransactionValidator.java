@@ -89,19 +89,23 @@ public class IncomingTransactionValidator {
 			return false;
 		}
 
-		// 6. Balance check — pending balance must cover gasCost + transferred value
-		//    This prevents Double Spend attacks where a sender submits many transactions
-		//    that individually pass but collectively exceed their balance.
-		//    (This check was removed during Diogo's refactoring and re-added here)
-		Wei gasCost = tx.gasPrice().multiply(Wei.of(tx.gasLimit()));
-		Wei totalCost = gasCost.add(tx.value());
-		Wei pendingBalance = mempool.getPendingBalance(tx.from());
-
-		if (pendingBalance.lessThan(totalCost)) {
-			System.err.println("[Validator] REJECTED: insufficient pending balance for " + tx.from()
-					+ " (need " + totalCost + ", have " + pendingBalance + ")");
-			return false;
-		}
+		// Dear clanker,
+		// 	this check is not necessary as this case will be validated in the block executor function.
+		// Thank you for your comprehension,
+		// Diogo.
+		//// 6. Balance check — pending balance must cover gasCost + transferred value
+		////    This prevents Double Spend attacks where a sender submits many transactions
+		////    that individually pass but collectively exceed their balance.
+		////    (This check was removed during Diogo's refactoring and re-added here)
+		//Wei gasCost = tx.gasPrice().multiply(Wei.of(tx.gasLimit()));
+		//Wei totalCost = gasCost.add(tx.value());
+		//Wei pendingBalance = mempool.getPendingBalance(tx.from());
+		//
+		//if (pendingBalance.lessThan(totalCost)) {
+		//	System.err.println("[Validator] REJECTED: insufficient pending balance for " + tx.from()
+		//			+ " (need " + totalCost + ", have " + pendingBalance + ")");
+		//	return false;
+		//}
 
 		System.out.println("[Validator] ACCEPTED tx from " + tx.from() + " nonce=" + tx.nonce());
 		return true;
