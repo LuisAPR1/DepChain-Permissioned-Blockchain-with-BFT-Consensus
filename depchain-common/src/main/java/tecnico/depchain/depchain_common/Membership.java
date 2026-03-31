@@ -58,7 +58,7 @@ public class Membership {
 				int port = Integer.parseInt(props.getProperty("client." + i + ".port"));
 				String pubKeyB64 = props.getProperty("client." + i + ".publickey");
 				PublicKey pubKey = kf.generatePublic(new X509EncodedKeySpec(Base64.getDecoder().decode(pubKeyB64)));
-				Address depchainAddress = Address.fromHexString(props.getProperty("member."+i+".depchainAddress"));
+				Address depchainAddress = Address.fromHexString(props.getProperty("client."+i+".depchainAddress"));
 				clients[i] = new DepchainClient(new InetSocketAddress(host, port), pubKey, depchainAddress);
 			}
 
