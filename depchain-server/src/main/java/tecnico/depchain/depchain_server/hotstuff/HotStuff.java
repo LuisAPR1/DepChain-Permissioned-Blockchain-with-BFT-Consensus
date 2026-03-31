@@ -152,6 +152,18 @@ public class HotStuff {
 		this.outgoingFilter = filter;
 	}
 
+	/**
+	 * Initializes the blockchain with a genesis block (Block 0).
+	 * Must be called before start(). The genesis block represents the initial
+	 * world state before any transactions are executed.
+	 */
+	public void setGenesisBlock(Block genesisBlock) {
+		if (running) {
+			throw new IllegalStateException("Cannot set genesis block after HotStuff has started");
+		}
+		decidedBlocks.add(genesisBlock);
+	}
+
 	private void handleMsg(byte[] data, InetSocketAddress remote) {
 		byte[] msgBytes = new byte[data.length - 1];
 		System.arraycopy(data, 1, msgBytes, 0, msgBytes.length);

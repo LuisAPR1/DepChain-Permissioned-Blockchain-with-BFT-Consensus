@@ -23,6 +23,8 @@ import tecnico.depchain.depchain_common.links.AuthenticatedPerfectLink;
 import tecnico.depchain.depchain_common.messages.ConfirmMessage;
 import tecnico.depchain.depchain_common.messages.TransactionMessage;
 import tecnico.depchain.depchain_server.blockchain.Block;
+import tecnico.depchain.depchain_server.blockchain.EVM;
+import tecnico.depchain.depchain_server.blockchain.GenesisLoader;
 import tecnico.depchain.depchain_server.hotstuff.CryptoService;
 import tecnico.depchain.depchain_server.hotstuff.HotStuff;
 
@@ -60,8 +62,20 @@ public class Depchain {
 
 		Address ownAddress = members[replicaID].getDepchainAddress();
 
+		// Load genesis file and initialize EVM state
+		String genesisPath = "genesis.json";
+		GenesisLoader.loadGenesis(genesisPath);
+
+		// Create genesis block (Block 0) with the initial world state
+		Block genesisBlock = new Block(
+			null,  // previousBlockHash is null for genesis
+			new java.util.ArrayList<>(),  // genesis has no regular transactions
+			EVM.getInstance().getWorldState()
+		);
+
 		//TODO: Add threshold crypto
 		hotStuff = new HotStuff(replicaID, ownAddress, "localhost", 42069, numReplicas, ownKey, publicKeys, crypto, null);
+		hotStuff.setGenesisBlock(genesisBlock);
 		hotStuff.setOnDecide(Depchain::onDecide);
 		hotStuff.start();
 
