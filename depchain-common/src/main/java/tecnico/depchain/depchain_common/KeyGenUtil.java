@@ -53,11 +53,14 @@ public class KeyGenUtil {
 			props.setProperty("member." + i + ".host", "localhost");
 			props.setProperty("member." + i + ".port", String.valueOf(memberBasePort + i));
 			props.setProperty("member." + i + ".publickey", pubB64);
+			props.setProperty("member." + i + ".depchainAddress",
+					String.format("0x%040x", i + 1));
 			// node.<id>.privatekey — member IDs are 0-based
 			props.setProperty("node." + i + ".privatekey", privB64);
 		}
 
 		// Generate client keys
+		// Client addresses use repeating hex digits: 0x1111...1111, 0x2222...2222, etc.
 		for (int i = 0; i < numClients; i++) {
 			KeyPair kp = kpg.generateKeyPair();
 			String pubB64 = Base64.getEncoder().encodeToString(kp.getPublic().getEncoded());
@@ -66,6 +69,9 @@ public class KeyGenUtil {
 			props.setProperty("client." + i + ".host", "localhost");
 			props.setProperty("client." + i + ".port", String.valueOf(clientBasePort + i));
 			props.setProperty("client." + i + ".publickey", pubB64);
+			String hexDigit = Integer.toHexString(i + 1);
+			String clientAddr = "0x" + new String(new char[40]).replace('\0', hexDigit.charAt(0));
+			props.setProperty("client." + i + ".depchainAddress", clientAddr);
 			// Client node IDs start after the members
 			int nodeId = numMembers + i;
 			props.setProperty("node." + nodeId + ".privatekey", privB64);

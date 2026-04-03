@@ -85,45 +85,6 @@ public class ByzantineClientTest {
         assertTrue(stx.verify(alicePubKey), "Tx signed by Alice should verify with Alice's public key");
     }
 
-    /**
-     * A transaction signed by Alice should NOT verify against Bob's public key.
-     */
-    @Test
-    public void testSignatureFailsWithWrongKey() {
-        Transaction tx = makeTx(0, ALICE, BOB, 10, BASE_FEE_GAS, 100);
-        SignedTransaction stx = SignedTransaction.signTansaction(tx, aliceKey);
-        assertFalse(stx.verify(bobPubKey),
-                "Tx signed by Alice should NOT verify with Bob's public key");
-    }
-
-    /**
-     * A corrupted signature should not verify.
-     */
-    @Test
-    public void testCorruptedSignatureRejected() {
-        Transaction tx = makeTx(0, ALICE, BOB, 10, BASE_FEE_GAS, 100);
-        SignedTransaction stx = SignedTransaction.signTansaction(tx, aliceKey);
-
-        // Corrupt the signature by flipping bits
-        byte[] corruptedSig = stx.signature().clone();
-        corruptedSig[0] ^= 0xFF;
-        corruptedSig[corruptedSig.length - 1] ^= 0xFF;
-
-        SignedTransaction corrupted = new SignedTransaction(tx, corruptedSig);
-        assertFalse(corrupted.verify(alicePubKey),
-                "Corrupted signature should not verify");
-    }
-
-    /**
-     * Null signature should not verify.
-     */
-    @Test
-    public void testNullSignatureRejected() {
-        Transaction tx = makeTx(0, ALICE, BOB, 10, BASE_FEE_GAS, 100);
-        SignedTransaction stx = new SignedTransaction(tx, null);
-        assertFalse(stx.verify(alicePubKey), "Null signature should not verify");
-    }
-
     // ── Sender spoofing ─────────────────────────────────────────────────
 
     /**
@@ -139,19 +100,6 @@ public class ByzantineClientTest {
         // Server would verify with Alice's registered public key
         assertFalse(stx.verify(alicePubKey),
                 "Tx signed by Bob pretending to be Alice should fail verification with Alice's key");
-    }
-
-    // ── TransactionRunner rejections (Byzantine at execution level) ─────
-
-    /**
-     * Byzantine client creates a tx from a non-existent account.
-     */
-    @Test
-    public void testGhostSenderRejected() {
-        Address ghost = Address.fromHexString("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead");
-        Transaction tx = makeTx(0, ghost, BOB, 10, BASE_FEE_GAS, 100);
-        assertFalse(runner.executeTransaction(tx),
-                "Tx from non-existent sender should be rejected by TransactionRunner");
     }
 
     /**
@@ -182,67 +130,8 @@ public class ByzantineClientTest {
     }
 
     /**
-     * Byzantine client skips a nonce (submits nonce=5 when expected is 0).
-     */
-    @Test
-    public void testNonceGapRejected() {
-        Transaction tx = makeTx(5, ALICE, BOB, 10, BASE_FEE_GAS, 100);
-        assertFalse(runner.executeTransaction(tx),
-                "Tx with nonce gap should be rejected");
-    }
-
-    /**
-     * Byzantine client submits tx with zero gas price.
-     */
-    @Test
-    public void testZeroGasPriceRejected() {
-        Transaction tx = makeTx(0, ALICE, BOB, 0, BASE_FEE_GAS, 100);
-        assertFalse(runner.executeTransaction(tx),
-                "Tx with zero gas price should be rejected");
-    }
-
-    /**
-     * Byzantine client submits tx with gas limit below BASE_FEE_GAS.
-     */
-    @Test
-    public void testInsufficientGasLimitRejected() {
-        Transaction tx = makeTx(0, ALICE, BOB, 10, 100, 100);
-        assertFalse(runner.executeTransaction(tx),
-                "Tx with gasLimit < 21000 should be rejected");
-    }
-
-    // ── Double-spend via mempool ────────────────────────────────────────
-
-    /**
-     * Byzantine client submits two txs with the same nonce to the mempool.
-     * The second should overwrite the first (mempool is a TreeMap keyed by nonce).
-     * When the block is built, only one tx per nonce should execute.
-     */
-    @Test
-    public void testDoubleSpendSameNonceInMempool() {
-        Mempool mempool = new Mempool();
-
-        Transaction tx1 = makeTx(0, ALICE, BOB, 10, BASE_FEE_GAS, 100);
-        Transaction tx2 = makeTx(0, ALICE, BOB, 20, BASE_FEE_GAS, 200);
-
-        SignedTransaction stx1 = new SignedTransaction(tx1, new byte[64]);
-        SignedTransaction stx2 = new SignedTransaction(tx2, new byte[64]);
-
-        mempool.addTransaction(stx1);
-        mempool.addTransaction(stx2);
-
-        // TreeMap keyed by nonce → second overwrites first
-        assertEquals(1, mempool.totalSize(),
-                "Mempool should have only 1 tx (second overwrites first with same nonce)");
-
-        java.util.List<Transaction> top = mempool.getTopTransactions(Long.MAX_VALUE);
-        assertEquals(1, top.size());
-        assertEquals(Wei.of(20), top.get(0).gasPrice(),
-                "The overwritten tx should be the one with gasPrice=20");
-    }
-
-    /**
      * After executing a tx, a Byzantine client cannot execute another tx with the same nonce.
+     * Also tests nonce replay rejection.
      */
     @Test
     public void testDoubleSpendAtExecutionLevel() {

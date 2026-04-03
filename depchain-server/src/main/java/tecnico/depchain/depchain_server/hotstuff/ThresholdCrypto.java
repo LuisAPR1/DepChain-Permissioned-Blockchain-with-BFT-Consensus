@@ -1,6 +1,11 @@
 package tecnico.depchain.depchain_server.hotstuff;
 
 import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -168,11 +173,24 @@ public class ThresholdCrypto {
 
 
 	public static class DealerParams implements Serializable {
+		private static final long serialVersionUID = 1L;
 		public String pairingParamsStr;
 		public byte[] generator;
 		public byte[] globalPublicKey;
 		public Map<Integer, byte[]> privateShares;
 		public Map<Integer, byte[]> publicShares;
+
+		public void saveToFile(String path) throws IOException {
+			try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(path))) {
+				oos.writeObject(this);
+			}
+		}
+
+		public static DealerParams loadFromFile(String path) throws IOException, ClassNotFoundException {
+			try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
+				return (DealerParams) ois.readObject();
+			}
+		}
 	}
 
 	/**

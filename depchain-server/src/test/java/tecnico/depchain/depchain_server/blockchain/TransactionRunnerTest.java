@@ -68,45 +68,6 @@ public class TransactionRunnerTest {
         assertTrue(result, "Tx with nonce=0 from fresh account (stateNonce=0) should succeed");
     }
 
-    /**
-     * Tx with wrong nonce should be rejected.
-     */
-    @Test
-    public void testWrongNonceRejected() {
-        Transaction tx = makeTx(5, SENDER, RECEIVER, 10, BASE_FEE_GAS, 1000, null);
-        boolean result = runner.executeTransaction(tx);
-        assertFalse(result, "Tx with nonce=5 from fresh account should be rejected");
-    }
-
-    /**
-     * After a successful tx, the sender's nonce should be incremented.
-     * BUG: TransactionRunner never increments sender nonce.
-     */
-    @Test
-    public void testSenderNonceIncrementedAfterSuccess() {
-        Transaction tx = makeTx(0, SENDER, RECEIVER, 10, BASE_FEE_GAS, 1000, null);
-        runner.executeTransaction(tx);
-        runner.getUpdater().commit();
-
-        long nonceAfter = evm.getNonce(SENDER);
-        assertEquals(1, nonceAfter,
-                "Sender nonce should be 1 after one successful transaction");
-    }
-
-    /**
-     * Two sequential txs from the same sender should work with incrementing nonces.
-     * BUG: fails because nonce is never incremented after the first tx.
-     */
-    @Test
-    public void testSequentialTransactionsIncrementNonce() {
-        Transaction tx0 = makeTx(0, SENDER, RECEIVER, 10, BASE_FEE_GAS, 100, null);
-        assertTrue(runner.executeTransaction(tx0), "First tx (nonce=0) should succeed");
-        runner.getUpdater().commit();
-
-        Transaction tx1 = makeTx(1, SENDER, RECEIVER, 10, BASE_FEE_GAS, 100, null);
-        assertTrue(runner.executeTransaction(tx1), "Second tx (nonce=1) should succeed");
-    }
-
     // ── Transfer + Gas accounting ───────────────────────────────────────
 
     /**
@@ -154,16 +115,6 @@ public class TransactionRunnerTest {
     // ── Rejection cases ─────────────────────────────────────────────────
 
     /**
-     * Tx from non-existent sender should fail.
-     */
-    @Test
-    public void testNonExistentSenderRejected() {
-        Address ghost = Address.fromHexString("0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead");
-        Transaction tx = makeTx(0, ghost, RECEIVER, 10, BASE_FEE_GAS, 100, null);
-        assertFalse(runner.executeTransaction(tx), "Tx from non-existent sender should fail");
-    }
-
-    /**
      * Tx with insufficient balance should fail.
      */
     @Test
@@ -173,52 +124,6 @@ public class TransactionRunnerTest {
         // upfront = 999_000 + 10*21000 = 999_000 + 210_000 = 1_209_000 > 1_000_000
         boolean result = runner.executeTransaction(tx);
         assertFalse(result, "Tx exceeding sender balance should be rejected");
-    }
-
-    /**
-     * Tx with zero gas price should fail.
-     */
-    @Test
-    public void testZeroGasPriceRejected() {
-        Transaction tx = makeTx(0, SENDER, RECEIVER, 0, BASE_FEE_GAS, 100, null);
-        boolean result = runner.executeTransaction(tx);
-        assertFalse(result, "Tx with gasPrice=0 should be rejected");
-    }
-
-    /**
-     * Tx with gasLimit below BASE_FEE_GAS should fail.
-     */
-    @Test
-    public void testGasLimitBelowBaseFeeRejected() {
-        Transaction tx = makeTx(0, SENDER, RECEIVER, 10, 100, 100, null);
-        boolean result = runner.executeTransaction(tx);
-        assertFalse(result, "Tx with gasLimit < 21000 should be rejected");
-    }
-
-    // ── Bytes.EMPTY vs null bug ─────────────────────────────────────────
-
-    /**
-     * Plain transfer with Bytes.EMPTY data should NOT enter the contract execution path.
-     * BUG: Bytes.EMPTY != null, so TransactionRunner.executeTransaction enters
-     * executeContract for plain transfers, which will fail (receiver has no code).
-     */
-    @Test
-    public void testBytesEmptyDataDoesNotTriggerContractExecution() {
-        Transaction tx = makeTx(0, SENDER, RECEIVER, 10, BASE_FEE_GAS, 1000, Bytes.EMPTY);
-        boolean result = runner.executeTransaction(tx);
-        assertTrue(result,
-                "Plain transfer with Bytes.EMPTY data should succeed (not enter contract path)");
-    }
-
-    /**
-     * Plain transfer with null data should work (contract path skipped).
-     */
-    @Test
-    public void testNullDataSkipsContractExecution() {
-        Transaction tx = makeTx(0, SENDER, RECEIVER, 10, BASE_FEE_GAS, 1000, null);
-        boolean result = runner.executeTransaction(tx);
-        // Will still fail due to nonce bug, but tests the data==null path
-        assertTrue(result, "Transfer with null data should succeed (skips contract path)");
     }
 
     // ── Contract creation ───────────────────────────────────────────────

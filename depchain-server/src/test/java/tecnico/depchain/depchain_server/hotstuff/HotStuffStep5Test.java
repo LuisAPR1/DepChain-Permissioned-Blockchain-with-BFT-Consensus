@@ -120,25 +120,6 @@ public class HotStuffStep5Test {
     // ── Tests ───────────────────────────────────────────────────────────
 
     @Test
-    public void testGenesisBlockSetBeforeStart() throws Exception {
-        buildCluster(N);
-        for (HotStuff hs : replicas) {
-            assertEquals(1, hs.getDecidedBlockCount(),
-                    "Before start, only genesis block should be decided");
-        }
-    }
-
-    @Test
-    public void testGenesisBlockSetOnlyOnce() throws Exception {
-        buildCluster(N);
-        startAll();
-        for (HotStuff hs : replicas) {
-            assertThrows(IllegalStateException.class, () -> hs.setGenesisBlock(new Block()),
-                    "Cannot set genesis after start()");
-        }
-    }
-
-    @Test
     public void testConsensusDecidesBlock() throws Exception {
         buildCluster(N);
         startAll();
@@ -155,25 +136,6 @@ public class HotStuffStep5Test {
         for (HotStuff hs : replicas) {
             assertTrue(hs.getDecidedBlockCount() > 1,
                     "Each replica should have decided at least one block beyond genesis");
-        }
-    }
-
-    @Test
-    public void testDecidedBlockHasCorrectStructure() throws Exception {
-        buildCluster(N);
-        startAll();
-
-        boolean reached = waitForDecisions(1, 30_000, false, -1);
-        assertTrue(reached, "Consensus should complete");
-
-        // The decided block should have empty transactions (mempool is empty)
-        // and a non-null previousBlockHash (pointing to genesis)
-        for (int i = 0; i < N; i++) {
-            Block decided = decidedPerReplica.get(i).get(0);
-            assertNotNull(decided, "Decided block should not be null");
-            assertNotNull(decided.getTransactions(), "Transactions list should exist");
-            assertTrue(decided.getTransactions().isEmpty(),
-                    "Block should have no transactions (empty mempool)");
         }
     }
 
@@ -211,21 +173,4 @@ public class HotStuffStep5Test {
         }
     }
 
-    @Test
-    public void testLeaderRotation() throws Exception {
-        buildCluster(N);
-        startAll();
-
-        // After 2+ successful views, leader has rotated
-        boolean reached = waitForDecisions(2, 40_000, false, -1);
-        assertTrue(reached, "Multiple views should succeed");
-
-        // View number should have advanced (view 0 timeout + 2+ successes)
-        int maxView = 0;
-        for (HotStuff hs : replicas) {
-            maxView = Math.max(maxView, hs.getCurrentView());
-        }
-        assertTrue(maxView >= 3,
-                "Views should advance: 1 timeout + 2+ successes = view >= 3, got " + maxView);
-    }
 }

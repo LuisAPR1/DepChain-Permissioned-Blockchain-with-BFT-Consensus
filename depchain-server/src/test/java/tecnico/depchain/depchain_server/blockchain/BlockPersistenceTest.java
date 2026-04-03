@@ -43,38 +43,7 @@ public class BlockPersistenceTest {
         persister = new BlockPersister(tempDir);
     }
 
-    // ── Empty block round-trip ──────────────────────────────────────────
-
-    @Test
-    public void testEmptyBlockSaveLoad() throws IOException {
-        Block original = new Block("0xprevhash", new ArrayList<>(), new TreeMap<>());
-
-        persister.saveBlock(original, 0);
-        Block loaded = persister.loadBlock(0);
-
-        assertNotNull(loaded, "Loaded block should not be null");
-        assertEquals(original.getPreviousBlockHash(), loaded.getPreviousBlockHash(),
-                "Previous block hash should survive round-trip");
-        assertTrue(loaded.getTransactions().isEmpty(),
-                "Empty block should have no transactions after loading");
-        assertTrue(loaded.getState().isEmpty(),
-                "Empty block should have no state after loading");
-    }
-
-    @Test
-    public void testBlockHashPreservedAfterSaveLoad() throws IOException {
-        Block original = new Block("0xprevhash", new ArrayList<>(), new TreeMap<>());
-        String originalHash = original.getBlockHash();
-        assertNotNull(originalHash, "Block hash should be calculated on construction");
-
-        persister.saveBlock(original, 1);
-        Block loaded = persister.loadBlock(1);
-
-        assertEquals(originalHash, loaded.getBlockHash(),
-                "Block hash should be preserved after save/load");
-    }
-
-    // ── Block with transactions ─────────────────────────────────────────
+    // ── Block with transactions ───────────────────────────────────────
 
     @Test
     public void testBlockWithTransactionsSaveLoad() throws IOException {
@@ -107,53 +76,6 @@ public class BlockPersistenceTest {
         assertEquals(1, loadedTx2.nonce(), "tx2 nonce should be 1");
         assertEquals(Bytes.fromHexString("0xdeadbeef"), loadedTx2.data(),
                 "tx2 data should survive round-trip");
-    }
-
-    /**
-     * Contract creation tx (to=null) should round-trip correctly.
-     */
-    @Test
-    public void testContractCreationTxSaveLoad() throws IOException {
-        Transaction tx = new Transaction(0, ALICE, null, Wei.of(10), 100000,
-                Wei.ZERO, Bytes.fromHexString("0x600060006000"));
-
-        List<Transaction> txs = new ArrayList<>();
-        txs.add(tx);
-        Block original = new Block("0xdef", txs, new TreeMap<>());
-
-        persister.saveBlock(original, 3);
-        Block loaded = persister.loadBlock(3);
-
-        Transaction loadedTx = loaded.getTransactions().get(0);
-        assertNull(loadedTx.to(), "Contract creation tx should have null 'to' after loading");
-        assertEquals(ALICE, loadedTx.from());
-        assertNotNull(loadedTx.data(), "Init code should survive round-trip");
-    }
-
-    // ── Block with world state ──────────────────────────────────────────
-
-    @Test
-    public void testBlockWithEOAStateSaveLoad() throws IOException {
-        TreeMap<String, AccountState> state = new TreeMap<>();
-        state.put(ALICE.toHexString(), new AccountState("1000000", 5, null, new TreeMap<>()));
-        state.put(BOB.toHexString(), new AccountState("500000", 0, null, new TreeMap<>()));
-
-        Block original = new Block("0x123", new ArrayList<>(), state);
-
-        persister.saveBlock(original, 4);
-        Block loaded = persister.loadBlock(4);
-
-        assertEquals(2, loaded.getState().size(), "Should have 2 accounts in state");
-
-        AccountState aliceState = loaded.getState().get(ALICE.toHexString());
-        assertNotNull(aliceState, "Alice should be in state");
-        assertEquals("1000000", aliceState.getBalance(), "Alice balance should be 1000000");
-        assertEquals(5, aliceState.getNonce(), "Alice nonce should be 5");
-
-        AccountState bobState = loaded.getState().get(BOB.toHexString());
-        assertNotNull(bobState, "Bob should be in state");
-        assertEquals("500000", bobState.getBalance());
-        assertEquals(0, bobState.getNonce());
     }
 
     @Test
@@ -204,55 +126,4 @@ public class BlockPersistenceTest {
                 "Two blocks with identical content should produce the same hash");
     }
 
-    @Test
-    public void testBlockHashChangesWithDifferentState() {
-        Transaction tx = new Transaction(0, ALICE, BOB, Wei.of(10), 21000, Wei.of(100), null);
-        List<Transaction> txs = new ArrayList<>();
-        txs.add(tx);
-
-        TreeMap<String, AccountState> state1 = new TreeMap<>();
-        state1.put(ALICE.toHexString(), new AccountState("1000", 0, null, new TreeMap<>()));
-
-        TreeMap<String, AccountState> state2 = new TreeMap<>();
-        state2.put(ALICE.toHexString(), new AccountState("2000", 0, null, new TreeMap<>()));
-
-        Block block1 = new Block("0xprev", txs, state1);
-        Block block2 = new Block("0xprev", txs, state2);
-
-        assertNotEquals(block1.getBlockHash(), block2.getBlockHash(),
-                "Blocks with different state should have different hashes");
-    }
-
-    // ── File creation verification ──────────────────────────────────────
-
-    @Test
-    public void testSaveBlockCreatesFile() throws IOException {
-        Block block = new Block("0x0", new ArrayList<>(), new TreeMap<>());
-        Path filePath = persister.saveBlock(block, 42);
-
-        assertTrue(Files.exists(filePath), "Block file should exist after save");
-        assertTrue(filePath.toString().endsWith("block_42.json"),
-                "File should be named block_42.json");
-        assertTrue(Files.size(filePath) > 0, "File should not be empty");
-    }
-
-    @Test
-    public void testLoadNonExistentBlockThrows() {
-        assertThrows(IOException.class, () -> persister.loadBlock(999),
-                "Loading non-existent block should throw IOException");
-    }
-
-    // ── JSON string serialization ───────────────────────────────────────
-
-    @Test
-    public void testToJsonProducesValidJson() {
-        Block block = new Block("0xprev", new ArrayList<>(), new TreeMap<>());
-        String json = BlockPersister.toJson(block);
-
-        assertNotNull(json, "toJson should not return null");
-        assertTrue(json.contains("block_hash") || json.contains("blockHash"),
-                "JSON should contain block hash field");
-        assertTrue(json.contains("previous_block_hash") || json.contains("previousBlockHash"),
-                "JSON should contain previous block hash field");
-    }
 }

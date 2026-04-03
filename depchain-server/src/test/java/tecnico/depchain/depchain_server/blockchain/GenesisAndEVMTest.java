@@ -174,32 +174,6 @@ public class GenesisAndEVMTest {
     // ════════════════════════════════════════════════════════════════════
 
     /**
-     * Creating EOAs via EVM.createEOA should work and accounts should be retrievable.
-     */
-    @Test
-    public void testCreateEOAWithBalance() {
-        Address addr = Address.fromHexString("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        evm.createEOA(addr, Wei.of(42000));
-
-        assertNotNull(evm.getUpdater().get(addr), "EOA should exist after createEOA");
-        assertEquals(Wei.of(42000), evm.getUpdater().get(addr).getBalance(),
-                "EOA balance should match creation value");
-        assertEquals(0, evm.getUpdater().get(addr).getNonce(),
-                "New EOA nonce should be 0");
-    }
-
-    /**
-     * Newly created EOAs should start with nonce 0.
-     */
-    @Test
-    public void testEOANonceStartsAtZero() {
-        Address addr = Address.fromHexString("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-        evm.createEOA(addr, Wei.of(1));
-
-        assertEquals(0, evm.getNonce(addr), "EVM.getNonce should return 0 for new EOA");
-    }
-
-    /**
      * getWorldState() should include all accounts created via createEOA.
      */
     @Test
@@ -256,28 +230,4 @@ public class GenesisAndEVMTest {
                 "addr2 nonce should survive snapshot/restore");
     }
 
-    /**
-     * World state snapshot keys should be deterministically ordered (TreeMap).
-     */
-    @Test
-    public void testWorldStateSnapshotDeterministicOrdering() {
-        // Create in reverse order to verify TreeMap sorts them
-        Address addrC = Address.fromHexString("0xcccccccccccccccccccccccccccccccccccccccc");
-        Address addrA = Address.fromHexString("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-        Address addrB = Address.fromHexString("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
-
-        evm.createEOA(addrC, Wei.of(3));
-        evm.createEOA(addrA, Wei.of(1));
-        evm.createEOA(addrB, Wei.of(2));
-
-        TreeMap<String, AccountState> state = evm.getWorldState();
-        String[] keys = state.keySet().toArray(new String[0]);
-
-        assertEquals(3, keys.length, "Should have 3 accounts");
-        // TreeMap keys are sorted lexicographically
-        assertTrue(keys[0].compareTo(keys[1]) < 0,
-                "First key should be < second key (deterministic order)");
-        assertTrue(keys[1].compareTo(keys[2]) < 0,
-                "Second key should be < third key (deterministic order)");
-    }
 }

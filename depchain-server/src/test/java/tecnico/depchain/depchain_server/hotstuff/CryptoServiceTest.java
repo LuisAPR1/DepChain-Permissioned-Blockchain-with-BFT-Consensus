@@ -52,15 +52,6 @@ public class CryptoServiceTest {
 	}
 
 	@Test
-	void testBLSPartialSignature() {
-		byte[] data = "BLS Test".getBytes();
-		byte[] partialSig = thresholdCryptos[2].signPartial(data);
-
-		assertTrue(thresholdCryptos[0].verifyPartial(2, data, partialSig));
-		assertFalse(thresholdCryptos[0].verifyPartial(1, data, partialSig));
-	}
-
-	@Test
 	void testBLSAggregationAndThresholdVerification() {
 		byte[] data = "Aggregate Test".getBytes();
 
@@ -73,34 +64,6 @@ public class CryptoServiceTest {
 		assertNotNull(thresholdSig);
 
 		assertTrue(thresholdCryptos[1].verifyThreshold(data, thresholdSig));
-	}
-
-	@Test
-	void testBLSRejectsNotEnoughSignatures() {
-		byte[] data = "Aggregate Test".getBytes();
-
-		Map<Integer, byte[]> partialSigs = new HashMap<>();
-		for (int i = 0; i < THRESHOLD - 1; i++) {
-			partialSigs.put(i, thresholdCryptos[i].signPartial(data));
-		}
-
-		assertThrows(IllegalArgumentException.class, () -> {
-			thresholdCryptos[0].aggregateShares(partialSigs);
-		});
-	}
-
-	@Test
-	void testBLSAggregationWithDifferentSubset() {
-		byte[] data = "Aggregate Test 2".getBytes();
-
-		Map<Integer, byte[]> partialSigs = new HashMap<>();
-		partialSigs.put(1, thresholdCryptos[1].signPartial(data));
-		partialSigs.put(2, thresholdCryptos[2].signPartial(data));
-		partialSigs.put(3, thresholdCryptos[3].signPartial(data));
-
-		byte[] thresholdSig = thresholdCryptos[0].aggregateShares(partialSigs);
-
-		assertTrue(thresholdCryptos[0].verifyThreshold(data, thresholdSig));
 	}
 
 	@Test

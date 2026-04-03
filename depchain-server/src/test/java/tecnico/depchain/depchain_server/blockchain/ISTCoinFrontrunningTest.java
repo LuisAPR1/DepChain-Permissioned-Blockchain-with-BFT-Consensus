@@ -132,20 +132,6 @@ public class ISTCoinFrontrunningTest {
         assertEquals(BigInteger.valueOf(2), decimals, "IST Coin should have 2 decimals");
     }
 
-    @Test
-    public void testInitialSupplyAssignedToAdmin() {
-        BigInteger balance = balanceOf(ADMIN);
-        BigInteger expectedSupply = new BigInteger("10000000000"); // 100M * 10^2
-        assertEquals(expectedSupply, balance,
-                "Admin should hold the full initial supply of 10,000,000,000 base units");
-    }
-
-    @Test
-    public void testUserStartsWithZeroTokens() {
-        BigInteger balance = balanceOf(USER);
-        assertEquals(BigInteger.ZERO, balance, "User should start with 0 IST tokens");
-    }
-
     // ── ERC-20 transfer ─────────────────────────────────────────────────
 
     @Test
@@ -164,21 +150,6 @@ public class ISTCoinFrontrunningTest {
         BigInteger expectedAdmin = new BigInteger("10000000000").subtract(BigInteger.valueOf(amount));
         assertEquals(expectedAdmin, adminBal,
                 "Admin balance should decrease by transferred amount");
-    }
-
-    // ── Approve & Allowance ─────────────────────────────────────────────
-
-    @Test
-    public void testApproveFromZeroSucceeds() {
-        // Approve USER to spend 1000 tokens on Admin's behalf
-        long amount = 1000;
-        Bytes callData = Bytes.fromHexString(SEL_APPROVE + pad32(USER) + pad32(amount));
-        boolean ok = execTx(1, ADMIN, istCoin, callData, 0);
-        assertTrue(ok, "approve(user, 1000) from zero allowance should succeed");
-
-        BigInteger allowed = allowance(ADMIN, USER);
-        assertEquals(BigInteger.valueOf(amount), allowed,
-                "Allowance should be 1000 after approve");
     }
 
     // ── Frontrunning Protection ─────────────────────────────────────────

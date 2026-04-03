@@ -1,111 +1,144 @@
-# DepChain - Stage 1
+# DepChain
 
 ## Highly Dependable Systems (2025-2026)
 
-This project implements **DepChain** (Dependable Chain), a simplified permissioned (closed membership) blockchain system with dependability guarantees. The first stage focuses on the **consensus layer**, using the **Basic HotStuff Algorithm** as its foundation.
+**DepChain** (Dependable Chain) is a simplified permissioned blockchain system with high dependability guarantees. It implements the **Basic HotStuff** BFT consensus algorithm, a native cryptocurrency (**DepCoin**), an EVM-based smart contract layer (Hyperledger Besu), and a frontrunning-resistant **IST Coin** ERC-20 token.
 
 ---
 
 ## Architecture & Modules
 
-The implementation is structured into layered modules, separating client logic, server/blockchain node logic, and shared resources based on abstractions (e.g., Authenticated Perfect Links, Quorum Certificates).
+* **`depchain-server`**: Blockchain replica — HotStuff consensus, EVM transaction execution, block persistence, mempool with gas-price ordering, and crash recovery.
+* **`depchain-client`**: Client library — signs and submits transactions (DepCoin transfers / smart contract calls), waits for f+1 matching confirmations from replicas.
+* **`depchain-common`**: Shared layer — UDP link stack (FairLossLink → StubbornLink → AuthenticatedPerfectLink with X25519 DH), broadcasts, message types, `Transaction`/`SignedTransaction`, and `Membership` configuration.
 
-* **`depchain-server`**: Implements the BFT Consensus logic (Basic HotStuff), including cryptography (PKI & Threshold Signatures), leader rotation, view changes, and an append-only memory array simulating the blockchain storage.
-* **`depchain-client`**: Client library responsible for submitting transactions/requests (simple strings) to the service via an upcall interface and receiving execution confirmations.
-* **`depchain-common`**: Shared models and utilities for both server and client modules.
-
-### Core Assumptions
-1. **Static Membership**: Leader and blockchain members are known to all prior to system startup.
-2. **PKI & Threshold Cryptography**: Utilizes pre-distributed public/private key pairs and JPBC for BLS threshold signatures to construct Quorum Certificates (QC).
-3. **UDP Networking**: The basic communication mimics an unreliable network (Fair Loss Links). Abstractions handle retries, delays, and duplicate mechanisms on top of UDP.
-
----
-
-## Security & Dependability Mechanisms
-
-To tolerate a subset of malicious or arbitrary-behaving replicas (Byzantine faults) across an unreliable network, the following protections are integrated:
-
-* **Strict Message Authentication**: All nodes sign their votes/messages using Ed25519 PKI. The platform ignores any messages with tampering, invalid signatures, or out-of-range sender IDs.
-* **Threshold Signatures (BLS/JPBC)**: Quorum Certificates natively require \( n - f \) valid partial signatures from distinct replicas to form a valid threshold signature, preventing a single compromised node from forging a QC.
-* **Byzantine Filtering & Equivocation Protection**: 
-  * Replicas ignore old views, silently dropped messages, and invalid/spoofed sender IDs.
-  * The network identifies leader equivocacy (sending conflicting messages to different replicas) and times out to trigger a view change instead of achieving conflicting decisions.
-  * Ensures safety guarantees remain strict: an attack mixing Byzantine behavior and crash faults will halt progress to preserve safety (`n=4, f=1` resulting in no decision if valid quorum is unmet).
+### Key Properties
+- **Static membership** with pre-distributed Ed25519 keys (PKI).
+- **UDP networking** with layered abstractions (Fair Loss → Stubborn → Authenticated Perfect Links).
+- **Ephemeral X25519 Diffie-Hellman** handshake (authenticated by Ed25519) derives per-session HMAC-SHA256 keys for link-layer message authentication.
+- **BLS threshold signatures** (JPBC) for Quorum Certificates — pre-generated shared params loaded from file.
+- **BFT consensus**: tolerates f = ⌊(n−1)/3⌋ Byzantine replicas.
 
 ---
 
-## Build Instructions and Setup
+## Security & Dependability
 
-The project is built with **Java 8+** and uses **Maven** for dependency management. External libraries necessary for the project (such as the JPBC library for threshold signatures) are managed and downloaded automatically by Maven during compilation.
+- **Message authentication**: All inter-replica messages are HMAC-authenticated via DH-derived keys. Votes are signed with Ed25519.
+- **Threshold QCs**: Quorum Certificates require n−f valid partial BLS signatures from distinct replicas.
+- **Byzantine client tolerance**: Transactions are Ed25519-signed; replicas verify signatures, reject spoofed senders, overspends, nonce replays, and insufficient gas.
+- **Non-negative balances**: Transfer amounts are validated against sender balance before execution.
+- **Non-repudiation**: All operations are tied to Ed25519 signatures on the originating account's private key.
+- **Gas mechanism**: Transaction fee = gas_price × min(gas_limit, gas_used). Fees go to the block minter. Zero gas_price and insufficient gas_limit are rejected.
+- **Frontrunning protection**: The IST Coin ERC-20 `approve()` reverts if the current allowance is non-zero and the new value is also non-zero — the user must first set allowance to 0.
 
-To compile the entire project from the source code and ensure the self-contained ZIP has all libraries properly installed, run the following command in the project root:
+---
+
+## Build Instructions
+
+**Prerequisites**: Java 17+, Maven 3.8+
 
 ```bash
+# Compile everything (downloads dependencies automatically)
 mvn clean install
-```
 
-To compile without executing the test suite, use:
-```bash
+# Compile without running tests
 mvn clean install -DskipTests
 ```
 
+### Configuration Setup
+
+Before running the system, generate the PKI configuration and threshold crypto parameters:
+
+```bash
+# 1. Generate Ed25519 keys + membership config for 4 members + 1 client
+mvn exec:java -pl depchain-common \
+  -Dexec.mainClass="tecnico.depchain.depchain_common.KeyGenUtil" \
+  -Dexec.args="4 1 config.properties"
+
+# 2. Generate shared BLS threshold crypto parameters (run ONCE, shared by all replicas)
+mvn exec:java -pl depchain-server \
+  -Dexec.mainClass="tecnico.depchain.depchain_server.hotstuff.ThresholdParamsDealer" \
+  -Dexec.args="4 threshold-params.dat"
+```
+
+This creates:
+- `config.properties` — Ed25519 keys, network addresses, and DepChain account addresses for all members and clients.
+- `threshold-params.dat` — Shared BLS pairing parameters, generator, global public key, and per-replica private/public shares.
+
 ---
 
-## Execution Instructions (Demos and Tests)
+## Running the Tests (Demos)
 
-The system includes a suite of automated tests (`JUnit 5`) that serve as the main demonstration applications required for evaluation. These tests cover system correctness, security threats, and fault tolerance.
+The system includes a JUnit 5 test suite that demonstrates correctness, security, and fault tolerance. These tests serve as the **demo applications** required by the specification.
 
-### 1. Run all tests
-To execute the complete suite, which evaluates consensus, crash faults, Byzantine behavior injections, and client-server communication:
+### Run all tests
 ```bash
 mvn test
 ```
 
-### 2. Run Demos by Steps
-The tests are divided according to the project assignment steps. Each suite can be executed individually to observe specific scenarios:
+### Run by area
 
-* **Step 3 - Basic Blockchain Appends (No Faults)**
+**Stage 1 — Consensus Layer:**
+
+* **HotStuffStep3Test** — P2P link stack: FairLossLink, StubbornLink, AuthenticatedPerfectLink (DH handshake, HMAC authentication, wrong-key rejection)
   ```bash
-  mvn test -pl depchain-server -Dtest="HotStuffStep3Test"
+  mvn test -pl depchain-server "-Dtest=HotStuffStep3Test"
   ```
-* **Step 4 - Crash Tolerant (Timeout based)**
+* **HotStuffStep4Test** — Consensus data structures: TreeNode hashing/chain extension, Message serialization, QuorumCertificate vote accumulation and Ed25519 verification
   ```bash
-  mvn test -pl depchain-server -Dtest="HotStuffStep4Test"
+  mvn test -pl depchain-server "-Dtest=HotStuffStep4Test"
   ```
-* **Step 5 - Byzantine Fault Tolerance (Security Demos)**
+* **CryptoServiceTest** — Ed25519 signing, BLS partial/threshold signatures, QC integration
   ```bash
-  mvn test -pl depchain-server -Dtest="HotStuffStep5Test"
+  mvn test -pl depchain-server "-Dtest=CryptoServiceTest"
   ```
-* **Step 6 - Client Interaction & Service Integration**
+* **HotStuffStep5Test** — Full consensus integration: 4 replicas on real UDP, 3-phase PREPARE→PRE-COMMIT→COMMIT→DECIDE, leader rotation, multiple consecutive decisions
   ```bash
-  mvn test -pl depchain-server -Dtest="HotStuffStep6Test"
+  mvn test -pl depchain-server "-Dtest=HotStuffStep5Test"
+  ```
+* **HotStuffStep6Test** — BFT fault tolerance: consensus survives 1 crashed replica (f=1), crashed replica does not decide, silent Byzantine does not block consensus
+  ```bash
+  mvn test -pl depchain-server "-Dtest=HotStuffStep6Test"
+  ```
+
+**Stage 2 — Transaction Processing Layer:**
+
+* **GenesisAndEVMTest** — Genesis loading, EOA creation with balances, IST Coin contract deployment, balanceOf verification, world state snapshot/restore
+  ```bash
+  mvn test -pl depchain-server "-Dtest=GenesisAndEVMTest"
+  ```
+* **TransactionRunnerTest** — Nonce validation, DepCoin transfer debit/credit, gas fee to minter, balance rejection, contract creation
+  ```bash
+  mvn test -pl depchain-server "-Dtest=TransactionRunnerTest"
+  ```
+* **MempoolTest** — Nonce ordering, gas-price ordering (highest fee first), gas limit cap, cleanup after block commit
+  ```bash
+  mvn test -pl depchain-server "-Dtest=MempoolTest"
+  ```
+* **BlockPersistenceTest** — Block save/load round-trip with transactions, contract state (code + storage), hash determinism
+  ```bash
+  mvn test -pl depchain-server "-Dtest=BlockPersistenceTest"
+  ```
+* **ISTCoinFrontrunningTest** — ERC-20 decimals (2), transfer, approve frontrunning guard (non-zero→non-zero reverts), safe approve via zero, transferFrom with allowance
+  ```bash
+  mvn test -pl depchain-server "-Dtest=ISTCoinFrontrunningTest"
+  ```
+* **ByzantineClientTest** — Signature verification, spoofed sender detection, overspend rejection, nonce replay rejection, double-spend at execution level
+  ```bash
+  mvn test -pl depchain-server "-Dtest=ByzantineClientTest"
   ```
 
 ---
 
-## Fault Injection Guide (Byzantine Simulation)
+## Fault Injection
 
-To fulfill the specification requirements regarding changing how messages are delivered or the behavior of Byzantine nodes, the project includes an API designed to allow the testing of edge cases and robustness guarantees.
+The test infrastructure supports two mechanisms for simulating Byzantine behavior:
 
-The fault injection infrastructure is accessible in the test code and can be modified. There are two primary ways to inject and alter behaviors:
-
-**1. Through the Outgoing Message Filter (`setOutgoingFilter`)**:
-In the `HotStuff` class, the system has a functional interface that intercepts all messages a node attempts to send to the network. To test new scenarios in a test file like `HotStuffStep5Test`, this filter can be used:
-
+**1. Outgoing Message Filter** (`HotStuff.setOutgoingFilter`):
 ```java
-replicas[byzantineId].setOutgoingFilter((dest, msg) -> {
-    // To Delay (Slow Network Simulation):
-    // Thread.sleep(2000); 
-    
-    // To Drop (Simulate Packet Loss):
-    // return null; 
-    
-    // To Corrupt / Forge data in signatures, QCs, and Sender IDs:
-    // return new Message(MsgType.PREPARE, msg.getViewNumber(), falseId, corruptedSig, ...);
+replicas.get(byzantineId).setOutgoingFilter((dest, msg) -> {
+    return null; // Drop all outgoing messages (silent Byzantine)
 });
 ```
 
-**2. Through the Assignment of Invalid Cryptographic Keys**:
-To validate the exclusion of impostors in threshold signatures and the base consensus mechanism, the utility method `createReplicasWithByzantine` deliberately starts replicas with incorrect/mismatched *Ed25519* key pairs.
-
-The implemented methods in `depchain-server/src/test/java/tecnico/depchain/depchain_server/hotstuff/HotStuffStep5Test.java` demonstrate these techniques mitigating Byzantine faults, including leader equivocation and the sending of forged Quorum Certificates.
+**2. Invalid Cryptographic Keys**: Tests create replicas with mismatched Ed25519 keys to verify that the authentication layer correctly rejects messages from impostors.

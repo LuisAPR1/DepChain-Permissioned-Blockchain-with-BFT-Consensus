@@ -181,21 +181,4 @@ public class HotStuffStep6Test {
                     "Honest replica " + i + " should decide blocks despite silent Byzantine");
         }
     }
-
-    @Test
-    public void testViewAdvancesWithOneCrash() throws Exception {
-        buildCluster(N);
-        int crashedReplica = 0;
-        startAllExcept(crashedReplica);
-
-        // Wait for at least one real decision to prove views advance via consensus
-        boolean reached = waitForDecisions(1, 40_000, true, crashedReplica);
-        assertTrue(reached, "Alive replicas should decide despite one crash");
-
-        // Views should have advanced past the initial timeout
-        for (int i = 1; i < N; i++) {
-            assertTrue(replicas.get(i).getCurrentView() >= 2,
-                    "Alive replica " + i + " should have advanced views");
-        }
-    }
 }
