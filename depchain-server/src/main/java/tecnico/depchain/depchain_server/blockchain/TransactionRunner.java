@@ -79,8 +79,6 @@ public class TransactionRunner {
 		// Deduct upfront cost
 		sender.setBalance(sender.getBalance().subtract(upfrontCost));
 
-		// Generate contract address using sender's actual state nonce
-		// This prevents Byzantine clients from manipulating tx.nonce() to cause address collisions
 		Address contractAddress = Address.contractAddress(tx.from(), sender.getNonce());
 
 		// Create the contract account in the world updater before running init code

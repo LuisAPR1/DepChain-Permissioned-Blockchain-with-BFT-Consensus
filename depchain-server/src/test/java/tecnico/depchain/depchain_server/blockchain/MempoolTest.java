@@ -14,14 +14,7 @@ import tecnico.depchain.depchain_common.blockchain.SignedTransaction;
 import tecnico.depchain.depchain_common.blockchain.Transaction;
 
 /**
- * Test Class 3: Mempool Tests
- *
- * Covers:
- *  - addTransaction and totalSize
- *  - getTopTransactions ordering: highest gasPrice first, nonce ordering per sender
- *  - Gas limit cap in getTopTransactions
- *  - onBlockCommitted cleanup
- *  - Multiple senders interleaving
+ * Mempool tests — transaction ordering, gas limit cap, block commit cleanup.
  */
 public class MempoolTest {
 

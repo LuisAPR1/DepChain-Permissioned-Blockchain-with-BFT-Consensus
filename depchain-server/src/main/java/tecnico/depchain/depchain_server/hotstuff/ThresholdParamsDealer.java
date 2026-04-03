@@ -3,13 +3,8 @@ package tecnico.depchain.depchain_server.hotstuff;
 import java.io.IOException;
 
 /**
- * Standalone dealer utility that generates BLS threshold crypto parameters
- * and saves them to a file. This must be run ONCE before starting the replicas
- * so all replicas share the same pairing, generator, keys, and shares.
- *
- * Usage: java ThresholdParamsDealer <numMembers> <outputFilePath>
- *
- * Example: java ThresholdParamsDealer 4 threshold-params.dat
+ * Generates BLS threshold crypto parameters and saves them to a file.
+ * Run once before starting replicas.
  */
 public class ThresholdParamsDealer {
 

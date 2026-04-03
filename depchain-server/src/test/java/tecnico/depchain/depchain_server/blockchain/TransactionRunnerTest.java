@@ -12,16 +12,7 @@ import org.junit.jupiter.api.Test;
 import tecnico.depchain.depchain_common.blockchain.Transaction;
 
 /**
- * Test Class 2: TransactionRunner Tests
- *
- * Covers native transfer execution, gas accounting, nonce validation,
- * and known bugs in TransactionRunner.
- *
- * Known bugs these tests expose:
- *  - Nonce off-by-one: check is tx.nonce() != sender.getNonce()+1, should be != sender.getNonce()
- *  - Sender nonce never incremented after successful tx
- *  - Bytes.EMPTY is not null → plain transfers enter executeContract path
- *  - Wei.ZERO reference equality with != may not work correctly
+ * TransactionRunner tests — native transfers, gas accounting, nonce validation.
  */
 public class TransactionRunnerTest {
 
@@ -58,8 +49,6 @@ public class TransactionRunnerTest {
 
     /**
      * First tx from a fresh account (nonce=0) should succeed.
-     * BUG: fails because TransactionRunner checks tx.nonce() != sender.getNonce()+1,
-     * i.e. expects nonce=1 for a fresh account (getNonce()=0).
      */
     @Test
     public void testFirstTransactionNonceZeroShouldSucceed() {
@@ -81,7 +70,6 @@ public class TransactionRunnerTest {
         Transaction tx = makeTx(0, SENDER, RECEIVER, gasPrice, BASE_FEE_GAS, value, null);
 
         boolean ok = runner.executeTransaction(tx);
-        // May fail due to nonce bug; if it passes, check balances
         if (ok) {
             runner.getUpdater().commit();
             Wei expectedFee = Wei.of(gasPrice * BASE_FEE_GAS);
@@ -130,7 +118,6 @@ public class TransactionRunnerTest {
 
     /**
      * Contract creation (to=null) with nonce=0 should succeed.
-     * BUG: same nonce off-by-one issue in executeContractCreation.
      */
     @Test
     public void testContractCreationNonceZero() {

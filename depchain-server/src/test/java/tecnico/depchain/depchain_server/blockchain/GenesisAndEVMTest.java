@@ -15,20 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Test Class 1: Genesis Loading & EVM World-State Tests
- *
- * Covers:
- *  - Genesis EOA creation with correct balances
- *  - Genesis contract deployment (IST Coin)
- *  - IST Coin balanceOf via EVM call
- *  - World state snapshot completeness
- *  - World state snapshot/restore round-trip
- *
- * Expected failures (bugs to fix):
- *  - testGenesisLoadsSuccessfully: TransactionRunner nonce check off-by-one
- *    (tx.nonce() != sender.getNonce() + 1 should be tx.nonce() != sender.getNonce())
- *  - testGenesisDeploysISTCoinContract: same root cause
- *  - testISTCoinBalanceOfReturnsCorrectSupply: depends on contract deployment
+ * Genesis loading and EVM world-state tests.
  */
 public class GenesisAndEVMTest {
 
@@ -61,7 +48,6 @@ public class GenesisAndEVMTest {
 
     /**
      * Genesis loading must complete without exceptions.
-     * Currently FAILS due to nonce off-by-one in TransactionRunner.
      */
     @Test
     public void testGenesisLoadsSuccessfully() {

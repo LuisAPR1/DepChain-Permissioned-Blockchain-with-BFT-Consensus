@@ -34,7 +34,7 @@ public class Depchain {
 	private Map<Long, RequestStatus> pendingMessages = new HashMap<>();
 	private Map<Long, java.util.Set<InetSocketAddress>> confirmations = new HashMap<>();
 
-	// Nonce synchronization state - tracks votes per nonce value (Byzantine-resilient)
+	// Nonce synchronization state
 	private Map<Long, java.util.Set<InetSocketAddress>> nonceVotes = new HashMap<>();
 	private volatile boolean nonceSyncComplete = false;
 	private final Object nonceSyncLock = new Object();
@@ -46,7 +46,6 @@ public class Depchain {
 	private PrivateKey ownKey;
 	private String ownAddress; // Hex address "0x..." for the client's EOA
 
-	// Auto-incrementing nonce for transaction ordering
 	private long currentNonce = 0;
 
 	public Depchain(int clientId, List<InetSocketAddress> locals, PrivateKey ownKey, List<InetSocketAddress> remotes, List<PublicKey> remoteKeys)
@@ -56,43 +55,27 @@ public class Depchain {
 		broadcast = new BestEffortBroadcast(this::rxHandler, this::rxHandler, locals, ownKey, remotes, remoteKeys);
 		this.numReplicas = remotes.size();
 		this.f = (numReplicas - 1) / 3;
-		// A client requires f+1 matching responses to guarantee at least 1 honest replica processed it
 		this.quorumSize = f + 1;
 	}
 
-	/**
-	 * Sets the hex address (e.g., "0x1111...") of this client's Externally Owned Account.
-	 * Required for transaction construction.
-	 */
+	/** Sets this client's EOA address. */
 	public void setOwnAddress(String address) {
 		this.ownAddress = address;
 	}
 
-	/**
-	 * Manually sets the current nonce.
-	 * Useful for testing or when the client restarts and needs to sync with the network.
-	 */
+	/** Sets the current nonce. */
 	public void setNonce(long nonce) {
 		this.currentNonce = nonce;
 	}
 
-	/**
-	 * Synchronizes the client's local nonce with the server's committed or pending state.
-	 * Helps recover from desynchronization if a transaction was silently discarded.
-	 */
+	/** Synchronizes nonce from server state. */
 	public void syncNonceWithServer(long serverNonce) {
 		this.currentNonce = serverNonce;
 	}
 
 	/**
-	 * Queries replicas for the client's current nonce and updates the local counter.
-	 * In a BFT system, waits for f+1 matching NonceReplyMessage responses to guarantee
-	 * at least one honest replica responded correctly.
-	 *
-	 * This method should be called during client startup/crash recovery to sync
-	 * with the committed blockchain state.
-	 *
-	 * @return true if nonce was successfully synchronized, false on timeout/error
+	 * Queries replicas for the current nonce, waits for f+1 matching replies.
+	 * @return true if nonce was successfully synchronized
 	 */
 	public boolean syncNonce() {
 		if (ownAddress == null) {
@@ -132,7 +115,6 @@ public class Depchain {
 			}
 		}
 
-		// Debug: show vote distribution on failure
 		System.err.println("[Depchain Client] Failed to sync nonce: no nonce reached f+1 votes");
 		synchronized (nonceSyncLock) {
 			for (Map.Entry<Long, java.util.Set<InetSocketAddress>> entry : nonceVotes.entrySet()) {
@@ -143,13 +125,8 @@ public class Depchain {
 	}
 
 	/**
-	 * Submits a signed transaction to all replicas (fire-and-forget).
-	 * In this intermediate step, the method broadcasts the transaction and returns
-	 * the seqNum for future tracking. There is no ConfirmMessage response yet —
-	 * that will be wired in the next step when the Leader constructs blocks.
-	 *
-	 * @param tx The TransactionMessage to submit (will be signed automatically)
-	 * @return The seqNum assigned to this submission
+	 * Submits a signed transaction to all replicas and waits for f+1 confirmations.
+	 * @return true if accepted by f+1 replicas
 	 */
 	public boolean submitTransaction(TransactionMessage tx) {
 		// Signing is now done inside createTransfer/createContractCall via SignedTransaction.signTransaction().
@@ -198,21 +175,10 @@ public class Depchain {
 		return accepted;
 	}
 
-	/**
-	 * Convenience builder for a DepCoin transfer transaction.
-	 * Creates a Transaction record, signs it with Ed25519 via SignedTransaction,
-	 * wraps it in a TransactionMessage, and auto-increments the local nonce.
-	 *
-	 * @param to       Recipient hex address "0x..."
-	 * @param value    Amount in Wei (decimal string)
-	 * @param gasLimit Gas limit for this transaction
-	 * @param gasPrice Gas price in Wei (decimal string)
-	 * @return A ready-to-submit TransactionMessage (already signed)
-	 */
+	/** Creates and signs a DepCoin transfer transaction. */
 	public TransactionMessage createTransfer(String to, String value, long gasLimit, String gasPrice) {
 		if (ownAddress == null) throw new IllegalStateException("Call setOwnAddress() before creating transactions");
 
-		// Build the Transaction record with Besu types (now lives in depchain-common)
 		Transaction tx = new Transaction(
 				currentNonce,
 				Address.fromHexString(ownAddress),
@@ -222,33 +188,18 @@ public class Depchain {
 				Wei.of(new BigInteger(value)),
 				Bytes.EMPTY);  // no calldata for plain transfers
 
-		// Sign the transaction with Ed25519, producing a SignedTransaction
 		SignedTransaction signedTx = SignedTransaction.signTansaction(tx, ownKey);
 
-		// Wrap in transport message with clientId and seqNum
 		TransactionMessage msg = new TransactionMessage(clientId, signedTx);
 
-		// Nonce is incremented optimistically at creation time to allow pipelining
-		// multiple concurrent transactions. Use syncNonceWithServer() if desync occurs.
 		currentNonce += 1;
 		return msg;
 	}
 
-	/**
-	 * Convenience builder for a smart contract call.
-	 * Creates a Transaction record with the ABI-encoded calldata, signs it,
-	 * and auto-increments the local nonce.
-	 *
-	 * @param contractAddress Contract hex address "0x..."
-	 * @param callData        ABI-encoded function call (hex string "0x...")
-	 * @param gasLimit        Gas limit for this transaction
-	 * @param gasPrice        Gas price in Wei (decimal string)
-	 * @return A ready-to-submit TransactionMessage (already signed)
-	 */
+	/** Creates and signs a smart contract call transaction. */
 	public TransactionMessage createContractCall(String contractAddress, String callData, long gasLimit, String gasPrice) {
 		if (ownAddress == null) throw new IllegalStateException("Call setOwnAddress() before creating transactions");
 
-		// Build the Transaction record: value=0 for contract calls, data holds the ABI payload
 		Transaction tx = new Transaction(
 				currentNonce,
 				Address.fromHexString(ownAddress),
@@ -266,14 +217,12 @@ public class Depchain {
 	}
 
 	private void rxHandler(byte[] data, InetSocketAddress remote) {
-		// Try to deserialize as ConfirmMessage first (transaction confirmations)
 		ConfirmMessage confirmMsg = ConfirmMessage.deserialize(data);
 		if (confirmMsg != null) {
 			handleConfirmMessage(confirmMsg, remote);
 			return;
 		}
 
-		// Try to deserialize as NonceReplyMessage (nonce synchronization)
 		NonceReplyMessage nonceReply = NonceReplyMessage.deserialize(data);
 		if (nonceReply != null) {
 			handleNonceReply(nonceReply, remote);
@@ -281,9 +230,6 @@ public class Depchain {
 		}
 	}
 
-	/**
-	 * Handles transaction confirmation messages from replicas.
-	 */
 	private void handleConfirmMessage(ConfirmMessage msg, InetSocketAddress remote) {
 		Long seqNum = msg.getSeqNum();
 
@@ -306,12 +252,6 @@ public class Depchain {
 		}
 	}
 
-	/**
-	 * Handles nonce reply messages from replicas during synchronization.
-	 * Uses a vote map to track which nonce values received votes from which replicas,
-	 * preventing Byzantine replicas from poisoning the count by being first to respond.
-	 * Waits for f+1 matching responses before accepting the nonce value.
-	 */
 	private void handleNonceReply(NonceReplyMessage msg, InetSocketAddress remote) {
 		synchronized (nonceSyncLock) {
 			if (nonceSyncComplete) {
@@ -320,13 +260,10 @@ public class Depchain {
 
 			long receivedNonce = msg.getNonce();
 
-			// Get or create the voter set for this nonce value
 			java.util.Set<InetSocketAddress> voters = nonceVotes.computeIfAbsent(receivedNonce, k -> new java.util.HashSet<>());
 
-			// Add this replica's vote (prevents double-voting by the same replica)
 			voters.add(remote);
 
-			// Check if this nonce has reached f+1 votes
 			if (voters.size() >= quorumSize) {
 				this.currentNonce = receivedNonce;
 				nonceSyncComplete = true;

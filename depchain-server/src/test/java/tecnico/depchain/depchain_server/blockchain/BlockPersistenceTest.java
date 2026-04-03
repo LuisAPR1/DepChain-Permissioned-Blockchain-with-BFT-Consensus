@@ -19,14 +19,7 @@ import org.junit.jupiter.api.io.TempDir;
 import tecnico.depchain.depchain_common.blockchain.Transaction;
 
 /**
- * Test Class 4: Block Persistence (save/load round-trip)
- *
- * Covers:
- *  - Empty block save/load round-trip
- *  - Block with transactions round-trip
- *  - Block with world state (EOA + contract) round-trip
- *  - Block hash determinism
- *  - Potential Gson dual-registration bug for Transaction serializer/deserializer
+ * Block persistence tests — save/load round-trip, hash determinism.
  */
 public class BlockPersistenceTest {
 

@@ -26,9 +26,8 @@ import tecnico.depchain.depchain_common.blockchain.Transaction;
  * is committed.
  *
  * <h3>Block Construction Algorithm</h3>
- * {@link #getTopTransactions(long)} iterates: among all sender-queue heads, picks the
- * one with the highest gasPrice. Once picked, the next nonce of that sender becomes
- * the new head. This guarantees nonce ordering per-sender while maximizing gas revenue.
+ * {@link #getTopTransactions(long)} picks the sender-queue head with highest gasPrice,
+ * then advances to that sender's next nonce. Nonce ordering per-sender is preserved.
  */
 public class Mempool {
 

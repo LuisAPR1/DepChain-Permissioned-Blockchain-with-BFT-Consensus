@@ -110,8 +110,7 @@ public final class TestKeyHelper {
 	}
 
 	/**
-	 * Extract just the public keys from a list of key pairs (convenience
-	 * mirror of {@link CryptoService#extractPublicKeys}).
+	 * Extract just the public keys from a list of key pairs.
 	 */
 	public static List<PublicKey> extractPublicKeys(List<KeyPair> keyPairs) {
 		List<PublicKey> pubs = new ArrayList<>(keyPairs.size());

@@ -18,14 +18,7 @@ import tecnico.depchain.depchain_common.blockchain.SignedTransaction;
 import tecnico.depchain.depchain_common.blockchain.Transaction;
 
 /**
- * Test Class 6: Byzantine Client Behaviour Tests
- *
- * Covers:
- *  - Signature verification: valid signature passes, corrupted fails
- *  - Sender spoofing: signing with wrong key is detected
- *  - TransactionRunner rejection: ghost sender, insufficient balance, bad nonce
- *  - Double-spend attempt: same nonce submitted twice
- *  - Gas manipulation: zero gas price, gas below minimum
+ * Byzantine client behaviour tests — signature verification, spoofing, rejection cases.
  */
 public class ByzantineClientTest {
 

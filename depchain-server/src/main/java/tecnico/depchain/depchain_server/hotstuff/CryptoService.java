@@ -97,14 +97,14 @@ public class CryptoService {
 	}
 
 	/**
-	 * Convenience: sign a vote tuple using this replica's key.
+	 * Signs a vote tuple using this replica's key.
 	 */
 	public byte[] signVote(MsgType type, int viewNumber, byte[] nodeHash) {
 		return sign(buildVoteData(type, viewNumber, nodeHash));
 	}
 
 	/**
-	 * Convenience: verify a vote signature from a specific replica.
+	 * Verifies a vote signature from a specific replica.
 	 */
 	public boolean verifyVote(int senderId, MsgType type, int viewNumber, byte[] nodeHash, byte[] signature) {
 		return verify(senderId, buildVoteData(type, viewNumber, nodeHash), signature);

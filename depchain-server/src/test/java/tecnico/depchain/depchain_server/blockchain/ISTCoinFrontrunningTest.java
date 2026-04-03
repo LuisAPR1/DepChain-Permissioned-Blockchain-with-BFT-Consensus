@@ -16,15 +16,7 @@ import org.junit.jupiter.api.Test;
 import tecnico.depchain.depchain_common.blockchain.Transaction;
 
 /**
- * Test Class 5: IST Coin ERC-20 & Frontrunning Protection Tests
- *
- * Covers:
- *  - ERC-20 decimals() returns 2
- *  - ERC-20 transfer moves tokens
- *  - ERC-20 approve + allowance
- *  - Frontrunning protection: approve from non-zero to non-zero reverts
- *  - Frontrunning protection: approve to 0 then to new value succeeds
- *  - ERC-20 transferFrom with allowance
+ * IST Coin ERC-20 and frontrunning protection tests.
  */
 public class ISTCoinFrontrunningTest {
 

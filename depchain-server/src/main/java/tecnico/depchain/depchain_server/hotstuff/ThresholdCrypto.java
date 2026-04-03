@@ -24,9 +24,7 @@ import it.unisa.dia.gas.plaf.jpbc.pairing.a.TypeACurveGenerator;
 import it.unisa.dia.gas.plaf.jpbc.pairing.parameters.PropertiesParameters;
 
 /**
- * Implements BLS Threshold Signatures using the JPBC (Java Pairing-Based Cryptography) library.
- * This is a non-interactive scheme requiring only 1 round of communication.
- * Validations are mathematically robust and suitable for the Basic HotStuff protocol.
+ * BLS Threshold Signatures using JPBC.
  */
 public class ThresholdCrypto {
 	private final int replicaId;
@@ -194,9 +192,7 @@ public class ThresholdCrypto {
 	}
 
 	/**
-	 * Generates deterministic threshold crypto parameters.
-	 * Uses a fixed seed for the curve generation and element derivation,
-	 * ensuring all replicas produce identical cryptographic parameters.
+	 * Generates threshold crypto parameters from fixed seeds.
 	 */
 	public static DealerParams generateParams(int threshold, int numReplicas) {
 		TypeACurveGenerator cg = new TypeACurveGenerator(160, 512);
@@ -206,8 +202,6 @@ public class ThresholdCrypto {
 		Field<?> g1 = pairing.getG1();
 		Field<?> zr = pairing.getZr();
 
-		// Use deterministic element generation from fixed seeds
-		// This ensures all replicas produce identical threshold parameters
 		Element generator = g1.newElementFromHash(
 			"DepChain-Threshold-Generator-2024".getBytes(StandardCharsets.UTF_8), 0,
 			"DepChain-Threshold-Generator-2024".getBytes(StandardCharsets.UTF_8).length
@@ -215,7 +209,6 @@ public class ThresholdCrypto {
 
 		Element[] coefs = new Element[threshold];
 		for (int i = 0; i < threshold; i++) {
-			// Derive polynomial coefficients from deterministic seeds
 			String seed = "DepChain-Coef-" + i + "-2024";
 			byte[] seedBytes = seed.getBytes(StandardCharsets.UTF_8);
 			coefs[i] = zr.newElementFromHash(seedBytes, 0, seedBytes.length).getImmutable();
