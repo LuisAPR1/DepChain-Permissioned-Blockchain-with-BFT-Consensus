@@ -182,8 +182,15 @@ public class HotStuff {
 
 	/**
 	 * Recovers the blockchain state from previously persisted blocks.
-	 * Loads blocks from disk, replays them through the EVM, and populates
-	 * the decidedBlocks list. Must be called before start().
+	 * Loads blocks from disk and populates the decidedBlocks list.
+	 * Must be called before start().
+	 *
+	 * The EVM state is injected directly from the last block's state,
+	 * rather than replaying all transactions (which would fail for Block 0
+	 * since it has no transactions).
+	 *
+	 * The view number is synchronized with the number of recovered blocks
+	 * to ensure the node can rejoin the network correctly.
 	 *
 	 * @param blocks List of blocks in order (block 0, block 1, ..., block N)
 	 */
@@ -191,11 +198,24 @@ public class HotStuff {
 		if (running) {
 			throw new IllegalStateException("Cannot recover after HotStuff has started");
 		}
+		if (blocks.isEmpty()) {
+			return;
+		}
+
+		// Add all blocks to decidedBlocks
 		for (Block block : blocks) {
 			decidedBlocks.add(block);
-			// Replay block through EVM to rebuild world state
-			EVM.getInstance().executeBlock(block, ownAddress, true);
 		}
+
+		// Inject EVM state directly from the last block (no transaction replay needed)
+		Block lastBlock = blocks.get(blocks.size() - 1);
+		EVM.getInstance().setWorldState(lastBlock.getState());
+
+		// Sync view number with recovered blocks
+		// Each block is decided in a view, so view should be at least blocks.size() - 1
+		this.currentView = blocks.size() - 1;
+
+		System.out.println("[HotStuff-" + replicaID + "] Recovered " + blocks.size() + " blocks, view set to " + this.currentView);
 	}
 
 	/**

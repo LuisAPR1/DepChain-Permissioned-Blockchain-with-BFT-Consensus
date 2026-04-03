@@ -159,6 +159,34 @@ public class EVM {
 		return stateMap;
 	}
 
+	/**
+	 * Restores the EVM world state from a persisted state snapshot.
+	 * Used during crash recovery to inject the last known state directly,
+	 * avoiding the need to replay all transactions.
+	 *
+	 * @param stateMap TreeMap of address → AccountState from the last persisted block
+	 */
+	public void setWorldState(TreeMap<String, AccountState> stateMap) {
+		// Clear existing state
+		knownAddresses.clear();
+
+		// Recreate accounts from the state snapshot
+		for (var entry : stateMap.entrySet()) {
+			Address addr = Address.fromHexString(entry.getKey());
+			AccountState acctState = entry.getValue();
+
+			MutableAccount account = updater.createAccount(addr);
+			account.setBalance(Wei.of(new java.math.BigInteger(acctState.getBalance())));
+			account.setNonce(acctState.getNonce());
+
+			// Note: contract code is not stored in the state (only codeHash for integrity)
+			// Contracts would need to be redeployed or code stored separately
+
+			knownAddresses.add(addr);
+		}
+		updater.commit();
+	}
+
 	/** Returns the set of all known addresses (read-only view). */
 	public Set<Address> getKnownAddresses() {
 		return java.util.Collections.unmodifiableSet(knownAddresses);
