@@ -4,8 +4,12 @@ package tecnico.depchain.depchain_server.blockchain;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashSet;
+import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Set;
 import java.util.TreeMap;
+
+import org.apache.tuweni.bytes.Bytes32;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.hyperledger.besu.datatypes.Address;
@@ -155,14 +159,16 @@ public class EVM {
 				Bytes codeBytes = account.getCode();
 				code = codeBytes.toHexString();
 
-				// Capture storage slots
-				// Storage entries are accessed via iteration over stored values
-				for (var storageEntry : account.getStorageEntries()) {
-					String slotKey = storageEntry.getKey().toHexString();
-					String slotValue = storageEntry.getValue() != null
-						? storageEntry.getValue().toHexString()
-						: "0x0";
-					storage.put(slotKey, slotValue);
+					// Capture storage slots via storageEntriesFrom (available on SimpleAccount)
+				NavigableMap<Bytes32, org.hyperledger.besu.evm.account.AccountStorageEntry> entries =
+						account.storageEntriesFrom(Bytes32.ZERO, Integer.MAX_VALUE);
+				for (Map.Entry<Bytes32, org.hyperledger.besu.evm.account.AccountStorageEntry> storageEntry : entries.entrySet()) {
+					org.hyperledger.besu.evm.account.AccountStorageEntry val = storageEntry.getValue();
+					if (val != null && !val.getValue().isZero()) {
+						String slotKey = storageEntry.getKey().toHexString();
+						String slotValue = val.getValue().toHexString();
+						storage.put(slotKey, slotValue);
+					}
 				}
 			}
 
@@ -203,9 +209,10 @@ public class EVM {
 				// Restore storage slots
 				if (acctState.getStorage() != null) {
 					for (var storageEntry : acctState.getStorage().entrySet()) {
-						org.hyperledger.besu.datatypes.Hash slotKey =
-							org.hyperledger.besu.datatypes.Hash.fromHexString(storageEntry.getKey());
-						Bytes slotValue = Bytes.fromHexString(storageEntry.getValue());
+						org.apache.tuweni.units.bigints.UInt256 slotKey =
+							org.apache.tuweni.units.bigints.UInt256.fromHexString(storageEntry.getKey());
+						org.apache.tuweni.units.bigints.UInt256 slotValue =
+							org.apache.tuweni.units.bigints.UInt256.fromHexString(storageEntry.getValue());
 						account.setStorageValue(slotKey, slotValue);
 					}
 				}
