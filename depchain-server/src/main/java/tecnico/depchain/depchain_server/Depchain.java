@@ -25,6 +25,8 @@ import tecnico.depchain.depchain_common.blockchain.SignedTransaction;
 import tecnico.depchain.depchain_common.blockchain.Transaction;
 import tecnico.depchain.depchain_common.links.AuthenticatedPerfectLink;
 import tecnico.depchain.depchain_common.messages.ConfirmMessage;
+import tecnico.depchain.depchain_common.messages.NonceReplyMessage;
+import tecnico.depchain.depchain_common.messages.NonceRequestMessage;
 import tecnico.depchain.depchain_common.messages.TransactionMessage;
 import tecnico.depchain.depchain_server.blockchain.Block;
 import tecnico.depchain.depchain_server.blockchain.BlockPersister;
@@ -151,12 +153,32 @@ public class Depchain {
 		return blocks;
 	}
 
-	//Client msg handler
+	/**
+	 * Handles incoming messages from clients. Routes to appropriate handler
+	 * based on message type (TransactionMessage or NonceRequestMessage).
+	 */
 	private static void rxHandler(byte[] data, InetSocketAddress sender) {
+		// Try to deserialize as TransactionMessage first
 		TransactionMessage txMsg = TransactionMessage.deserialize(data);
-		if (txMsg == null)
+		if (txMsg != null) {
+			handleTransactionMessage(txMsg, sender);
 			return;
+		}
 
+		// Try to deserialize as NonceRequestMessage
+		NonceRequestMessage nonceMsg = NonceRequestMessage.deserialize(data);
+		if (nonceMsg != null) {
+			handleNonceRequest(nonceMsg, sender);
+			return;
+		}
+
+		// Unknown message type - ignore
+	}
+
+	/**
+	 * Handles incoming transaction messages from clients.
+	 */
+	private static void handleTransactionMessage(TransactionMessage txMsg, InetSocketAddress sender) {
 		SignedTransaction signedTx = txMsg.getSignedTransaction();
 		Address senderAddress = signedTx.tx().from();
 		if (!signedTx.verify(Membership.getAccountPublicKey(senderAddress)))
@@ -166,6 +188,22 @@ public class Depchain {
 
 		requestSenderMap.put(signedTx.tx(), sender);
 		requestIdMap.put(signedTx.tx(), txMsg.getSeqNum());
+	}
+
+	/**
+	 * Handles nonce query requests from clients for crash recovery.
+	 * Queries the committed EVM state directly (bypassing HotStuff).
+	 */
+	private static void handleNonceRequest(NonceRequestMessage nonceMsg, InetSocketAddress sender) {
+		Address address = nonceMsg.getAddress();
+		long nonce = EVM.getInstance().getNonce(address);
+
+		// Find the link for this sender and send reply
+		AuthenticatedPerfectLink link = links.get(sender);
+		if (link != null) {
+			NonceReplyMessage reply = new NonceReplyMessage(nonce);
+			link.transmit(reply.serialize());
+		}
 	}
 
 	private static void onDecide(Block blk) {

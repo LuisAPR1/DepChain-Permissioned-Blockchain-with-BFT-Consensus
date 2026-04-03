@@ -19,6 +19,8 @@ import tecnico.depchain.depchain_common.blockchain.SignedTransaction;
 import tecnico.depchain.depchain_common.blockchain.Transaction;
 import tecnico.depchain.depchain_common.broadcasts.BestEffortBroadcast;
 import tecnico.depchain.depchain_common.messages.ConfirmMessage;
+import tecnico.depchain.depchain_common.messages.NonceReplyMessage;
+import tecnico.depchain.depchain_common.messages.NonceRequestMessage;
 import tecnico.depchain.depchain_common.messages.TransactionMessage;
 
 enum RequestStatus {
@@ -31,6 +33,11 @@ public class Depchain {
 	private BestEffortBroadcast broadcast;
 	private Map<Long, RequestStatus> pendingMessages = new HashMap<>();
 	private Map<Long, java.util.Set<InetSocketAddress>> confirmations = new HashMap<>();
+
+	// Nonce synchronization state - tracks votes per nonce value (Byzantine-resilient)
+	private Map<Long, java.util.Set<InetSocketAddress>> nonceVotes = new HashMap<>();
+	private volatile boolean nonceSyncComplete = false;
+	private final Object nonceSyncLock = new Object();
 
 	private int numReplicas;
 	private int f;
@@ -75,6 +82,64 @@ public class Depchain {
 	 */
 	public void syncNonceWithServer(long serverNonce) {
 		this.currentNonce = serverNonce;
+	}
+
+	/**
+	 * Queries replicas for the client's current nonce and updates the local counter.
+	 * In a BFT system, waits for f+1 matching NonceReplyMessage responses to guarantee
+	 * at least one honest replica responded correctly.
+	 *
+	 * This method should be called during client startup/crash recovery to sync
+	 * with the committed blockchain state.
+	 *
+	 * @return true if nonce was successfully synchronized, false on timeout/error
+	 */
+	public boolean syncNonce() {
+		if (ownAddress == null) {
+			System.err.println("[Depchain Client] Cannot sync nonce: ownAddress not set");
+			return false;
+		}
+
+		Address address = Address.fromHexString(ownAddress);
+		NonceRequestMessage request = new NonceRequestMessage(address);
+
+		synchronized (nonceSyncLock) {
+			nonceVotes.clear();
+			nonceSyncComplete = false;
+		}
+
+		System.out.println("[Depchain Client] Requesting nonce from replicas for address: " + ownAddress);
+
+		broadcast.broadcast(request.serialize());
+
+		// Wait for f+1 matching responses
+		long timeoutMs = 5000;
+		long deadline = System.currentTimeMillis() + timeoutMs;
+
+		synchronized (nonceSyncLock) {
+			while (!nonceSyncComplete && System.currentTimeMillis() < deadline) {
+				try {
+					nonceSyncLock.wait(deadline - System.currentTimeMillis());
+				} catch (InterruptedException e) {
+					Thread.currentThread().interrupt();
+					return false;
+				}
+			}
+
+			if (nonceSyncComplete) {
+				System.out.println("[Depchain Client] Nonce synchronized to: " + currentNonce);
+				return true;
+			}
+		}
+
+		// Debug: show vote distribution on failure
+		System.err.println("[Depchain Client] Failed to sync nonce: no nonce reached f+1 votes");
+		synchronized (nonceSyncLock) {
+			for (Map.Entry<Long, java.util.Set<InetSocketAddress>> entry : nonceVotes.entrySet()) {
+				System.err.println("  Nonce " + entry.getKey() + ": " + entry.getValue().size() + " votes");
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -201,9 +266,25 @@ public class Depchain {
 	}
 
 	private void rxHandler(byte[] data, InetSocketAddress remote) {
-		ConfirmMessage msg = ConfirmMessage.deserialize(data);
-		if (msg == null) return;
+		// Try to deserialize as ConfirmMessage first (transaction confirmations)
+		ConfirmMessage confirmMsg = ConfirmMessage.deserialize(data);
+		if (confirmMsg != null) {
+			handleConfirmMessage(confirmMsg, remote);
+			return;
+		}
 
+		// Try to deserialize as NonceReplyMessage (nonce synchronization)
+		NonceReplyMessage nonceReply = NonceReplyMessage.deserialize(data);
+		if (nonceReply != null) {
+			handleNonceReply(nonceReply, remote);
+			return;
+		}
+	}
+
+	/**
+	 * Handles transaction confirmation messages from replicas.
+	 */
+	private void handleConfirmMessage(ConfirmMessage msg, InetSocketAddress remote) {
 		Long seqNum = msg.getSeqNum();
 
 		synchronized (pendingMessages) {
@@ -221,6 +302,35 @@ public class Depchain {
 						pendingMessages.notifyAll();
 					}
 				}
+			}
+		}
+	}
+
+	/**
+	 * Handles nonce reply messages from replicas during synchronization.
+	 * Uses a vote map to track which nonce values received votes from which replicas,
+	 * preventing Byzantine replicas from poisoning the count by being first to respond.
+	 * Waits for f+1 matching responses before accepting the nonce value.
+	 */
+	private void handleNonceReply(NonceReplyMessage msg, InetSocketAddress remote) {
+		synchronized (nonceSyncLock) {
+			if (nonceSyncComplete) {
+				return; // Already completed, ignore late responses
+			}
+
+			long receivedNonce = msg.getNonce();
+
+			// Get or create the voter set for this nonce value
+			java.util.Set<InetSocketAddress> voters = nonceVotes.computeIfAbsent(receivedNonce, k -> new java.util.HashSet<>());
+
+			// Add this replica's vote (prevents double-voting by the same replica)
+			voters.add(remote);
+
+			// Check if this nonce has reached f+1 votes
+			if (voters.size() >= quorumSize) {
+				this.currentNonce = receivedNonce;
+				nonceSyncComplete = true;
+				nonceSyncLock.notifyAll();
 			}
 		}
 	}

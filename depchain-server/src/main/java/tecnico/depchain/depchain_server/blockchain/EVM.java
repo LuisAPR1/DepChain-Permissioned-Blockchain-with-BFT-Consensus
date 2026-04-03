@@ -221,6 +221,21 @@ public class EVM {
 		return java.util.Collections.unmodifiableSet(knownAddresses);
 	}
 
+	/**
+	 * Gets the current nonce for an account from the committed world state.
+	 * Used by the server to respond to nonce query requests from clients.
+	 *
+	 * @param address The account address
+	 * @return The account's nonce, or 0 if the account doesn't exist
+	 */
+	public long getNonce(Address address) {
+		Account account = updater.get(address);
+		if (account == null) {
+			return 0;
+		}
+		return account.getNonce();
+	}
+
 	private static String sha256Hex(byte[] data) {
 		try {
 			MessageDigest digest = MessageDigest.getInstance("SHA-256");
