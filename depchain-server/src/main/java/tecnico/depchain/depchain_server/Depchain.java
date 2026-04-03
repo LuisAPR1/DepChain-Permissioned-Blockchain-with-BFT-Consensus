@@ -3,11 +3,15 @@ package tecnico.depchain.depchain_server;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.InvalidKeyException;
 import java.security.KeyPair;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +27,7 @@ import tecnico.depchain.depchain_common.links.AuthenticatedPerfectLink;
 import tecnico.depchain.depchain_common.messages.ConfirmMessage;
 import tecnico.depchain.depchain_common.messages.TransactionMessage;
 import tecnico.depchain.depchain_server.blockchain.Block;
+import tecnico.depchain.depchain_server.blockchain.BlockPersister;
 import tecnico.depchain.depchain_server.blockchain.EVM;
 import tecnico.depchain.depchain_server.blockchain.GenesisLoader;
 import tecnico.depchain.depchain_server.hotstuff.CryptoService;
@@ -37,7 +42,7 @@ public class Depchain {
 	private static HotStuff hotStuff;
 
 	public static void main(String[] args)
-		throws SocketException, NoSuchAlgorithmException, InvalidKeyException, IllegalArgumentException, IOException {
+			throws SocketException, NoSuchAlgorithmException, InvalidKeyException, IllegalArgumentException, IOException {
 		if (args.length < 2) {
 			System.err.print("Usage: java <class_path> <replicaID> <configFilePath>");
 			System.exit(1);
@@ -63,17 +68,6 @@ public class Depchain {
 
 		Address ownAddress = members[replicaID].getDepchainAddress();
 
-		// Load genesis file and initialize EVM state
-		String genesisPath = "genesis.json";
-		GenesisLoader.loadGenesis(genesisPath);
-
-		// Create genesis block (Block 0) with the initial world state
-		Block genesisBlock = new Block(
-			null,  // previousBlockHash is null for genesis
-			new java.util.ArrayList<>(),  // genesis has no regular transactions
-			EVM.getInstance().getWorldState()
-		);
-
 		// Initialize ThresholdCrypto for BFT quorum certificates
 		// BFT threshold: f = (n-1)/3, quorum = n - f = 2f + 1
 		int f = (numReplicas - 1) / 3;
@@ -89,9 +83,42 @@ public class Depchain {
 			thresholdParams.publicShares
 		);
 
+		// Initialize block persister for crash recovery
+		String blocksDir = "blocks";
+		BlockPersister blockPersister = new BlockPersister(Paths.get(blocksDir));
+
 		hotStuff = new HotStuff(replicaID, ownAddress, "localhost", 42069, numReplicas, ownKey, publicKeys, crypto, thresholdCrypto);
-		hotStuff.setGenesisBlock(genesisBlock);
+		hotStuff.setBlockPersister(blockPersister);
 		hotStuff.setOnDecide(Depchain::onDecide);
+
+		// Try to recover from persisted blocks, otherwise start fresh from genesis
+		List<Block> recoveredBlocks = loadPersistedBlocks(blockPersister);
+		if (!recoveredBlocks.isEmpty()) {
+			// Recovery: replay all blocks through EVM to rebuild world state
+			System.out.println("[Depchain] Recovering from " + recoveredBlocks.size() + " persisted blocks...");
+			hotStuff.recoverFromBlocks(recoveredBlocks);
+			System.out.println("[Depchain] Recovery complete. Last block: " + (recoveredBlocks.size() - 1));
+		} else {
+			// Fresh start: load genesis and create Block 0
+			System.out.println("[Depchain] No persisted blocks found. Starting fresh from genesis...");
+			String genesisPath = "genesis.json";
+			GenesisLoader.loadGenesis(genesisPath);
+
+			// Create genesis block (Block 0) with the initial world state
+			Block genesisBlock = new Block(
+				null,  // previousBlockHash is null for genesis
+				new ArrayList<>(),  // genesis has no regular transactions
+				EVM.getInstance().getWorldState()
+			);
+
+			// Save genesis block
+			Files.createDirectories(Paths.get(blocksDir));
+			blockPersister.saveBlock(genesisBlock, 0);
+
+			hotStuff.setGenesisBlock(genesisBlock);
+			System.out.println("[Depchain] Genesis block created and saved.");
+		}
+
 		hotStuff.start();
 
 		for (DepchainClient cli : clients) {
@@ -101,6 +128,27 @@ public class Depchain {
 
 		while (true);
 		//service.stop();
+	}
+
+	/**
+	 * Loads all persisted blocks from disk in order (block_0.json, block_1.json, ...).
+	 * Returns empty list if no blocks exist or on error.
+	 */
+	private static List<Block> loadPersistedBlocks(BlockPersister persister) {
+		List<Block> blocks = new ArrayList<>();
+		int blockNum = 0;
+		while (true) {
+			try {
+				Block block = persister.loadBlock(blockNum);
+				if (block == null) break;
+				blocks.add(block);
+				blockNum++;
+			} catch (IOException e) {
+				// No more blocks
+				break;
+			}
+		}
+		return blocks;
 	}
 
 	//Client msg handler

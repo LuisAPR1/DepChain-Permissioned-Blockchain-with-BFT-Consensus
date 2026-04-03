@@ -1,7 +1,10 @@
 package tecnico.depchain.depchain_server.hotstuff;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
@@ -23,6 +26,7 @@ import org.hyperledger.besu.datatypes.Address;
 import tecnico.depchain.depchain_common.blockchain.SignedTransaction;
 import tecnico.depchain.depchain_common.broadcasts.BestEffortBroadcast;
 import tecnico.depchain.depchain_server.blockchain.Block;
+import tecnico.depchain.depchain_server.blockchain.BlockPersister;
 import tecnico.depchain.depchain_server.blockchain.EVM;
 import tecnico.depchain.depchain_server.blockchain.Mempool;
 import tecnico.depchain.depchain_server.hotstuff.Message.MsgType;
@@ -45,6 +49,7 @@ public class HotStuff {
 
     private Mempool mempool;
 	private final List<Block> decidedBlocks = new ArrayList<>();
+	private BlockPersister blockPersister;
 
 	private final BlockingQueue<Message> messageQueue = new LinkedBlockingQueue<>();
 	private final List<Message> outOfOrderBuffer = new ArrayList<>();
@@ -162,6 +167,42 @@ public class HotStuff {
 			throw new IllegalStateException("Cannot set genesis block after HotStuff has started");
 		}
 		decidedBlocks.add(genesisBlock);
+	}
+
+	/**
+	 * Sets the directory where blocks will be persisted.
+	 * Must be called before start() if persistence is desired.
+	 */
+	public void setBlockPersister(BlockPersister persister) {
+		if (running) {
+			throw new IllegalStateException("Cannot set block persister after HotStuff has started");
+		}
+		this.blockPersister = persister;
+	}
+
+	/**
+	 * Recovers the blockchain state from previously persisted blocks.
+	 * Loads blocks from disk, replays them through the EVM, and populates
+	 * the decidedBlocks list. Must be called before start().
+	 *
+	 * @param blocks List of blocks in order (block 0, block 1, ..., block N)
+	 */
+	public void recoverFromBlocks(List<Block> blocks) {
+		if (running) {
+			throw new IllegalStateException("Cannot recover after HotStuff has started");
+		}
+		for (Block block : blocks) {
+			decidedBlocks.add(block);
+			// Replay block through EVM to rebuild world state
+			EVM.getInstance().executeBlock(block, ownAddress, true);
+		}
+	}
+
+	/**
+	 * Returns the number of decided blocks (used to determine next block number for persistence).
+	 */
+	public int getDecidedBlockCount() {
+		return decidedBlocks.size();
 	}
 
 	private void handleMsg(byte[] data, InetSocketAddress remote) {
@@ -635,6 +676,15 @@ public class HotStuff {
 			// Populate block state after execution and recalculate hash
 			blk.setState(EVM.getInstance().getWorldState());
 			blk.setBlockHash(blk.calculateHash());
+
+			// Persist block to disk
+			if (blockPersister != null) {
+				try {
+					blockPersister.saveBlock(blk, decidedBlocks.size() - 1);
+				} catch (IOException e) {
+					System.err.println("[HotStuff-" + replicaID + "] ERROR: Failed to persist block " + (decidedBlocks.size() - 1) + ": " + e.getMessage());
+				}
+			}
 		}
 	}
 
