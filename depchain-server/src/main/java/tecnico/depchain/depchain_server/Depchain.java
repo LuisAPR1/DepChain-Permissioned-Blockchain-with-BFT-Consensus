@@ -27,6 +27,7 @@ import tecnico.depchain.depchain_server.blockchain.EVM;
 import tecnico.depchain.depchain_server.blockchain.GenesisLoader;
 import tecnico.depchain.depchain_server.hotstuff.CryptoService;
 import tecnico.depchain.depchain_server.hotstuff.HotStuff;
+import tecnico.depchain.depchain_server.hotstuff.ThresholdCrypto;
 
 public class Depchain {
 	private static Map<InetSocketAddress, AuthenticatedPerfectLink> links = new HashMap<>();
@@ -73,8 +74,22 @@ public class Depchain {
 			EVM.getInstance().getWorldState()
 		);
 
-		//TODO: Add threshold crypto
-		hotStuff = new HotStuff(replicaID, ownAddress, "localhost", 42069, numReplicas, ownKey, publicKeys, crypto, null);
+		// Initialize ThresholdCrypto for BFT quorum certificates
+		// BFT threshold: f = (n-1)/3, quorum = n - f = 2f + 1
+		int f = (numReplicas - 1) / 3;
+		int threshold = numReplicas - f;  // quorum size (2f + 1)
+		ThresholdCrypto.DealerParams thresholdParams = ThresholdCrypto.generateParams(threshold, numReplicas);
+		ThresholdCrypto thresholdCrypto = new ThresholdCrypto(
+			replicaID,
+			threshold,
+			thresholdParams.pairingParamsStr,
+			thresholdParams.generator,
+			thresholdParams.globalPublicKey,
+			thresholdParams.privateShares.get(replicaID),
+			thresholdParams.publicShares
+		);
+
+		hotStuff = new HotStuff(replicaID, ownAddress, "localhost", 42069, numReplicas, ownKey, publicKeys, crypto, thresholdCrypto);
 		hotStuff.setGenesisBlock(genesisBlock);
 		hotStuff.setOnDecide(Depchain::onDecide);
 		hotStuff.start();
