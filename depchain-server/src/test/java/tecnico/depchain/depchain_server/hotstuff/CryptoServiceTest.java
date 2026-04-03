@@ -37,7 +37,7 @@ public class CryptoServiceTest {
 
 		for (int i = 0; i < N; i++) {
 			cryptoServices[i] = new CryptoService(i, keyPairs.get(i), publicKeys);
-			thresholdCryptos[i] = new ThresholdCrypto(i, THRESHOLD, N,
+			thresholdCryptos[i] = new ThresholdCrypto(i, THRESHOLD,
 					dealerParams.pairingParamsStr, dealerParams.generator,
 					dealerParams.globalPublicKey, dealerParams.privateShares.get(i),
 					dealerParams.publicShares);
@@ -105,7 +105,7 @@ public class CryptoServiceTest {
 
 	@Test
 	void testQCThresholdIntegration() {
-		TreeNode node = new TreeNode(new byte[32], "qc-threshold-test");
+		TreeNode node = new TreeNode(new byte[32], new tecnico.depchain.depchain_server.blockchain.Block());
 		QuorumCertificate qc = new QuorumCertificate(MsgType.PREPARE, 5, node);
 
 		byte[] voteData = CryptoService.buildVoteData(MsgType.PREPARE, 5, node.getHash());
