@@ -181,12 +181,7 @@ public class ThresholdCrypto {
 	 * ensuring all replicas produce identical cryptographic parameters.
 	 */
 	public static DealerParams generateParams(int threshold, int numReplicas) {
-		// Use a fixed seed for deterministic curve generation
-		SecureRandom fixedRandom = new SecureRandom();
-		fixedRandom.setSeed("DepChain-Deterministic-Threshold-2024".getBytes(StandardCharsets.UTF_8));
-
 		TypeACurveGenerator cg = new TypeACurveGenerator(160, 512);
-		cg.setRandom(fixedRandom);
 		PropertiesParameters params = (PropertiesParameters) cg.generate();
 		Pairing pairing = PairingFactory.getPairing(params);
 
