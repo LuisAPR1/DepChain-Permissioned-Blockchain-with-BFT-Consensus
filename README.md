@@ -1,8 +1,18 @@
 # DepChain
 
-Highly Dependable Systems — 2025-2026
+> A permissioned blockchain built around the Basic HotStuff BFT consensus algorithm, supporting native coin transfers, smart-contract execution on the Hyperledger Besu EVM, and an ERC-20 token with frontrunning-resistant approvals.
 
-DepChain is a permissioned blockchain built around the Basic HotStuff BFT consensus algorithm. It supports native DepCoin transfers, smart contract execution on the Hyperledger Besu EVM, and includes an IST Coin ERC-20 token with frontrunning-resistant `approve()`.
+DepChain implements native DepCoin transfers, smart contract execution on the Hyperledger Besu EVM, and includes an IST Coin ERC-20 token with frontrunning-resistant `approve()`. The system tolerates f = ⌊(n−1)/3⌋ Byzantine replicas.  
+**This project was developed as part of a university course assignment (Highly Dependable Systems, 2025/2026).**
+
+## Contents
+
+- [Modules](#modules)  
+- [Build](#build)  
+- [Tests](#tests)  
+- [Fault Injection](#fault-injection)
+
+---
 
 ## Modules
 
@@ -10,7 +20,9 @@ DepChain is a permissioned blockchain built around the Basic HotStuff BFT consen
 - `depchain-client` — Client library: signs/submits transactions, collects f+1 confirmations.
 - `depchain-common` — Shared code: UDP link stack (FairLoss → Stubborn → APL with X25519 DH), broadcasts, message types, `Transaction`/`SignedTransaction`, membership.
 
-Networking uses UDP with layered link abstractions. Links are authenticated via an ephemeral X25519 DH handshake (signed with Ed25519) that derives per-session HMAC keys. Quorum Certificates use BLS threshold signatures (JPBC library). The system tolerates f = ⌊(n−1)/3⌋ Byzantine replicas.
+Networking uses UDP with layered link abstractions. Links are authenticated via an ephemeral X25519 DH handshake (signed with Ed25519) that derives per-session HMAC keys. Quorum Certificates use BLS threshold signatures (JPBC library).
+
+---
 
 ## Build
 
@@ -40,6 +52,8 @@ mvn exec:java -pl depchain-server \
 This produces:
 - `config.properties` — Ed25519 keys, network addresses, account addresses.
 - `threshold-params.dat` — BLS pairing params, generator, public key, per-replica shares.
+
+---
 
 ## Tests
 
@@ -72,6 +86,8 @@ mvn test -pl depchain-server "-Dtest=ISTCoinFrontrunningTest"    # ERC-20 + fron
 mvn test -pl depchain-server "-Dtest=ByzantineClientTest"        # spoofing, overspend, replay, double-spend
 ```
 
+---
+
 ## Fault Injection
 
 Tests simulate Byzantine behaviour in two ways:
@@ -84,3 +100,16 @@ replicas.get(byzantineId).setOutgoingFilter((dest, msg) -> {
 ```
 
 2. **Wrong keys** — replicas created with mismatched Ed25519 keys to test authentication rejection.
+
+---
+
+## License & Acknowledgments
+
+- Educational project developed as part of a university course (Highly Dependable Systems, 2025/2026).  
+- Smart contract execution powered by the Hyperledger Besu EVM.  
+- BLS threshold signatures via the JPBC (Java Pairing-Based Cryptography) library.  
+- Cryptographic primitives: Ed25519 for authentication, X25519 for ephemeral key exchange, HMAC for per-session integrity.
+
+---
+
+*README written with supervised assistance from Claude Opus 4.7.*
